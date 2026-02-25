@@ -43,7 +43,8 @@ async function initDb() {
       text TEXT NOT NULL,
       points INTEGER DEFAULT 1,
       resolved INTEGER DEFAULT 0,
-      sort_order INTEGER DEFAULT 0
+      sort_order INTEGER DEFAULT 0,
+      required_answers INTEGER DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS answers (
@@ -60,8 +61,7 @@ async function initDb() {
       user_id INTEGER NOT NULL REFERENCES users(id),
       question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
       answer_id INTEGER NOT NULL REFERENCES answers(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(user_id, question_id)
+      created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS torches (
@@ -82,7 +82,29 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS game_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    INSERT INTO game_settings (key, value) VALUES ('game_phase', 'pre_merge')
+    ON CONFLICT (key) DO NOTHING;
+
     ALTER TABLE contestants ADD COLUMN IF NOT EXISTS torch_final_result TEXT;
+
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS required_answers INTEGER DEFAULT 1;
+
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'picks_user_id_question_id_key') THEN
+        ALTER TABLE picks DROP CONSTRAINT picks_user_id_question_id_key;
+      END IF;
+    END $$;
+
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'picks_user_id_question_id_answer_id_key') THEN
+        ALTER TABLE picks ADD CONSTRAINT picks_user_id_question_id_answer_id_key UNIQUE(user_id, question_id, answer_id);
+      END IF;
+    END $$;
   `);
 }
 

@@ -29,8 +29,12 @@ export default function WeekDetail({ user, setAppError }) {
       setTorchAssignments(torches);
       const existing = {};
       for (const q of data.questions) {
-        if (q.my_pick) {
-          existing[q.id] = q.my_pick.answer_id;
+        if (q.my_picks && q.my_picks.length > 0) {
+          if (q.required_answers > 1) {
+            existing[q.id] = q.my_picks.map(p => p.answer_id);
+          } else {
+            existing[q.id] = q.my_picks[0].answer_id;
+          }
         }
       }
       setPicks(existing);
@@ -47,10 +51,13 @@ export default function WeekDetail({ user, setAppError }) {
     setSubmitting(true);
     setMessage('');
     try {
-      const pickArray = Object.entries(picks).map(([question_id, answer_id]) => ({
-        question_id: parseInt(question_id),
-        answer_id: parseInt(answer_id),
-      }));
+      const pickArray = Object.entries(picks).flatMap(([question_id, answer]) => {
+        const answers = Array.isArray(answer) ? answer : [answer];
+        return answers.map(answer_id => ({
+          question_id: parseInt(question_id),
+          answer_id: parseInt(answer_id),
+        }));
+      });
       await api.submitPicks(pickArray);
       setMessage('Picks submitted!');
       setExpandedQuestions({});
@@ -79,7 +86,12 @@ export default function WeekDetail({ user, setAppError }) {
   }
 
   const isLocked = week.is_locked;
-  const answeredCount = Object.keys(picks).length;
+  const answeredCount = week.questions.filter(q => {
+    if (q.required_answers > 1) {
+      return Array.isArray(picks[q.id]) && picks[q.id].length === q.required_answers;
+    }
+    return picks[q.id] != null;
+  }).length;
   const totalQuestions = week.questions.length;
 
   return (
@@ -125,10 +137,25 @@ export default function WeekDetail({ user, setAppError }) {
         </div>
       )}
 
+      {message.includes('!') && user && !torchAssignments.some(t => t.user_id === user.id) && (
+        <div className="alert alert-torch-nudge">
+          🔦 You haven't lit your torch yet! Head to the <Link to="/">Dashboard</Link> to pick a contestant and start earning torch points.
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
         {week.questions.map((q, qi) => {
-          const pickedAnswer = picks[q.id] ? q.answers.find(a => a.id === picks[q.id]) : null;
-          const isCollapsed = !isLocked && pickedAnswer && !expandedQuestions[q.id];
+          const isMulti = q.required_answers > 1;
+          const currentPicks = isMulti
+            ? (Array.isArray(picks[q.id]) ? picks[q.id] : [])
+            : [];
+          const pickedAnswers = isMulti
+            ? currentPicks.map(id => q.answers.find(a => a.id === id)).filter(Boolean)
+            : (picks[q.id] ? [q.answers.find(a => a.id === picks[q.id])].filter(Boolean) : []);
+          const isFullyPicked = isMulti
+            ? pickedAnswers.length === q.required_answers
+            : pickedAnswers.length === 1;
+          const isCollapsed = !isLocked && isFullyPicked && !expandedQuestions[q.id];
 
           return (
             <div key={q.id} className={`card question-card ${q.resolved ? 'resolved' : ''}`}>
@@ -136,33 +163,43 @@ export default function WeekDetail({ user, setAppError }) {
                 <span className="question-number">Q{qi + 1}</span>
                 <span className="question-text">{q.text}</span>
                 <span className="question-points">
-                  {q.points} pt{q.points !== 1 ? 's' : ''}
+                  {isMulti ? `${q.points} pt${q.points !== 1 ? 's' : ''} each` : `${q.points} pt${q.points !== 1 ? 's' : ''}`}
                 </span>
+                {isMulti && !isLocked && (
+                  <span className="badge badge-pick-count">
+                    {currentPicks.length}/{q.required_answers}
+                  </span>
+                )}
                 {q.resolved && <span className="badge badge-resolved">✓ Resolved</span>}
               </div>
 
               {isCollapsed ? (
                 <div className="answers-list">
-                  <div className="answer-option selected">
-                    <span className="answer-text">{pickedAnswer.text}</span>
-                    {pickedAnswer.points_override != null && (
-                      <span className="answer-points">{pickedAnswer.points_override} pts</span>
-                    )}
-                    <button
-                      type="button"
-                      className="btn btn-xs"
-                      onClick={() => setExpandedQuestions({ ...expandedQuestions, [q.id]: true })}
-                    >
-                      Edit
-                    </button>
-                  </div>
+                  {pickedAnswers.map(pa => (
+                    <div key={pa.id} className="answer-option selected">
+                      <span className="answer-text">{pa.text}</span>
+                      {pa.points_override != null && (
+                        <span className="answer-points">{pa.points_override} pts</span>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn btn-xs"
+                    onClick={() => setExpandedQuestions({ ...expandedQuestions, [q.id]: true })}
+                    style={{ marginTop: '0.25rem' }}
+                  >
+                    Edit
+                  </button>
                 </div>
               ) : (
                 <div className="answers-list">
                   {q.answers.map(a => {
-                    const isSelected = picks[q.id] === a.id;
+                    const isSelected = isMulti
+                      ? currentPicks.includes(a.id)
+                      : picks[q.id] === a.id;
                     const isCorrect = a.is_correct;
-                    const wasMyPick = q.my_pick?.answer_id === a.id;
+                    const wasMyPick = q.my_picks?.some(p => p.answer_id === a.id);
 
                     return (
                       <label
@@ -174,7 +211,24 @@ export default function WeekDetail({ user, setAppError }) {
                           isLocked && wasMyPick && !isCorrect && q.resolved ? 'incorrect' : '',
                         ].join(' ')}
                       >
-                        {!isLocked && (
+                        {!isLocked && isMulti && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={!isSelected && currentPicks.length >= q.required_answers}
+                            onChange={() => {
+                              if (isSelected) {
+                                setPicks({ ...picks, [q.id]: currentPicks.filter(id => id !== a.id) });
+                              } else if (currentPicks.length < q.required_answers) {
+                                setPicks({ ...picks, [q.id]: [...currentPicks, a.id] });
+                              }
+                              if (currentPicks.length + (isSelected ? -1 : 1) === q.required_answers) {
+                                setExpandedQuestions({ ...expandedQuestions, [q.id]: false });
+                              }
+                            }}
+                          />
+                        )}
+                        {!isLocked && !isMulti && (
                           <input
                             type="radio"
                             name={`q-${q.id}`}
@@ -231,6 +285,9 @@ export default function WeekDetail({ user, setAppError }) {
             >
               {submitting ? 'Submitting...' : 'Submit Picks'}
             </button>
+            <p className="text-muted" style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>
+              Picks aren't final — you can come back and change them any time before lock.
+            </p>
           </div>
         )}
 

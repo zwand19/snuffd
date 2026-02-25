@@ -62,9 +62,9 @@ export default function Dashboard({ user, setAppError }) {
       setTorchMessage(
         result.action === 'initial'
           ? `Torch lit for ${result.contestant_name}!`
-          : result.action === 'forced_switch'
-            ? `Switched torch to ${result.contestant_name} (no penalty)`
-            : `Switched torch to ${result.contestant_name} (-1 point)`
+          : (result.action === 'forced_switch' || result.action === 'free_switch')
+            ? `Switched torch to ${result.contestant_name} (no penalty)!`
+            : `Switched torch to ${result.contestant_name} (-${result.penalty} points)`
       );
       setShowTorchPicker(false);
       loadData();
@@ -184,8 +184,8 @@ export default function Dashboard({ user, setAppError }) {
         <details className="torch-info">
           <summary>More Info</summary>
           <div className="torch-info-body">
-            <p>Each player carries a torch for a contestant. That torch starts at <strong>35 points</strong>. You can swap your contestant before any week, but you'll lose points. If your contestant is eliminated, you lose extra points and must pick someone new.</p>
-            <p>At the end of the game, everyone will have a torch for a finalist — you'll score based on how they do in the finale, your remaining torch points, and how long you've held that torch.</p>
+            <p>Each player carries a torch for a contestant. That torch burns brightly at <strong>35 points</strong> when the season starts. Before any week, you can pass your torch to a different contestant — but you'll lose points. If your contestant is eliminated, you lose extra points and must pick someone new. You'll want to swap off contestants you feel have too much heat!</p>
+            <p>At the end of the game, all players will have a torch for someone in the finale since you grab new contestants as yours get eliminated. You'll then get points based on how well they do in that episode + how many points your torch is worth + how long you've held that same torch.</p>
             <div className="torch-info-columns">
               <div>
                 <h5>Swaps</h5>
@@ -199,14 +199,14 @@ export default function Dashboard({ user, setAppError }) {
                 <h5>Elimination Penalty</h5>
                 <ul>
                   <li>Pre-merge: <strong>-4</strong></li>
-                  <li>Post-merge: <strong>-6</strong></li>
+                  <li>Post-merge / pre-finale: <strong>-6</strong></li>
                 </ul>
               </div>
               <div>
                 <h5>Finale Scoring</h5>
                 <ul>
                   <li>Winner: all points + up to <strong>6 bonus</strong> for consecutive weeks held</li>
-                  <li>Runner-up (FTC loss): <strong>half</strong> points</li>
+                  <li>Runner-up (FTC loss): <strong>half</strong> points (rounded down)</li>
                   <li>Eliminated in finale: <strong>1/3</strong> points</li>
                 </ul>
               </div>

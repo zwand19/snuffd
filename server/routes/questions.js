@@ -38,14 +38,14 @@ router.delete('/answers/:id', requireAdmin, async (req, res) => {
 });
 
 router.post('/', requireAdmin, async (req, res) => {
-  const { week_id, text, points, sort_order } = req.body;
+  const { week_id, text, points, sort_order, required_answers } = req.body;
   if (!week_id || !text) {
     return res.status(400).json({ error: 'week_id and text are required' });
   }
   try {
     const { rows } = await query(
-      'INSERT INTO questions (week_id, text, points, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
-      [week_id, text, points || 1, sort_order || 0]
+      'INSERT INTO questions (week_id, text, points, sort_order, required_answers) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [week_id, text, points || 1, sort_order || 0, required_answers || 1]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -55,13 +55,14 @@ router.post('/', requireAdmin, async (req, res) => {
 });
 
 router.put('/:id', requireAdmin, async (req, res) => {
-  const { text, points, sort_order } = req.body;
+  const { text, points, sort_order, required_answers } = req.body;
   let i = 1;
   const setClauses = [];
   const values = [];
   if (text !== undefined) { setClauses.push(`text = $${i++}`); values.push(text); }
   if (points !== undefined) { setClauses.push(`points = $${i++}`); values.push(points); }
   if (sort_order !== undefined) { setClauses.push(`sort_order = $${i++}`); values.push(sort_order); }
+  if (required_answers !== undefined) { setClauses.push(`required_answers = $${i++}`); values.push(required_answers); }
   if (setClauses.length === 0) {
     return res.status(400).json({ error: 'No updates' });
   }
@@ -126,8 +127,8 @@ router.post('/:id/clone', requireAdmin, async (req, res) => {
     const nextOrder = (parseInt(maxRow?.m) || 0) + 1;
 
     const { rows: [cloned] } = await query(
-      'INSERT INTO questions (week_id, text, points, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
-      [orig.week_id, newText, orig.points, nextOrder]
+      'INSERT INTO questions (week_id, text, points, sort_order, required_answers) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [orig.week_id, newText, orig.points, nextOrder, orig.required_answers || 1]
     );
 
     const { rows: answers } = await query(
@@ -192,14 +193,19 @@ router.post('/:id/add-contestants', requireAdmin, async (req, res) => {
 });
 
 router.post('/:id/resolve', requireAdmin, async (req, res) => {
-  const { answer_id } = req.body;
-  if (!answer_id) {
-    return res.status(400).json({ error: 'answer_id is required' });
+  const { answer_id, answer_ids } = req.body;
+  const ids = answer_ids || (answer_id ? [answer_id] : []);
+  if (ids.length === 0) {
+    return res.status(400).json({ error: 'answer_id or answer_ids is required' });
   }
   const qId = req.params.id;
   try {
     await query('UPDATE answers SET is_correct = 0 WHERE question_id = $1', [qId]);
-    await query('UPDATE answers SET is_correct = 1 WHERE id = $1 AND question_id = $2', [answer_id, qId]);
+    const ph = ids.map((_, i) => `$${i + 2}`).join(',');
+    await query(
+      `UPDATE answers SET is_correct = 1 WHERE id IN (${ph}) AND question_id = $1`,
+      [qId, ...ids]
+    );
     await query('UPDATE questions SET resolved = 1 WHERE id = $1', [qId]);
 
     const { rows: [question] } = await query('SELECT * FROM questions WHERE id = $1', [qId]);

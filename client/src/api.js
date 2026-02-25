@@ -82,18 +82,22 @@ export const api = {
   deleteAnswer: (id) => request(`/api/questions/answers/${id}`, { method: 'DELETE' }),
   cloneQuestion: (qId) => request(`/api/questions/${qId}/clone`, { method: 'POST' }),
   addContestantAnswers: (qId) => request(`/api/questions/${qId}/add-contestants`, { method: 'POST' }),
-  resolveQuestion: (qId, answerId) => request(`/api/questions/${qId}/resolve`, { method: 'POST', body: JSON.stringify({ answer_id: answerId }) }),
+  resolveQuestion: (qId, answerIds) => request(`/api/questions/${qId}/resolve`, { method: 'POST', body: JSON.stringify({ answer_ids: Array.isArray(answerIds) ? answerIds : [answerIds] }) }),
   unresolveQuestion: (qId) => request(`/api/questions/${qId}/unresolve`, { method: 'POST' }),
 
   submitPicks: (picks) => request('/api/picks', { method: 'POST', body: JSON.stringify({ picks }) }),
   getRankings: () => request('/api/picks/rankings'),
   getSubmissionStatus: (weekId) => request(`/api/picks/status/${weekId}`),
 
+  getGamePhase: () => request('/api/settings/game_phase'),
+  setGamePhase: (game_phase) => request('/api/settings/game_phase', { method: 'PUT', body: JSON.stringify({ game_phase }) }),
+
   getTorches: () => request('/api/torches'),
   getTorchHistory: () => request('/api/torches/history'),
   getTorchWeek: (weekId) => request(`/api/torches/week/${weekId}`),
   pickTorch: (contestant_id) => request('/api/torches/pick', { method: 'POST', body: JSON.stringify({ contestant_id }) }),
   getTorchRankings: () => request('/api/torches/rankings'),
+  awardTorchBonus: (contestant_id, bonus_type) => request('/api/torches/award', { method: 'POST', body: JSON.stringify({ contestant_id, bonus_type }) }),
   resolveTorch: (contestant_id, result) => request('/api/torches/resolve', { method: 'POST', body: JSON.stringify({ contestant_id, result }) }),
   unresolveTorch: (contestant_id) => request('/api/torches/unresolve', { method: 'POST', body: JSON.stringify({ contestant_id }) }),
 };

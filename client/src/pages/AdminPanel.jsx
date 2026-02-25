@@ -110,11 +110,16 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(q.text);
   const [points, setPoints] = useState(q.points);
+  const [requiredAnswers, setRequiredAnswers] = useState(q.required_answers || 1);
   const [editingAnswerId, setEditingAnswerId] = useState(null);
   const [editAnswerPts, setEditAnswerPts] = useState('');
+  const [correctIds, setCorrectIds] = useState(
+    q.answers.filter(a => a.is_correct).map(a => a.id)
+  );
+  const isMulti = (q.required_answers || 1) > 1;
 
   async function saveQuestion() {
-    await api.updateQuestion(q.id, { text, points });
+    await api.updateQuestion(q.id, { text, points, required_answers: requiredAnswers });
     setEditing(false);
     onUpdate();
   }
@@ -153,13 +158,21 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
               className="input input-sm" style={{ width: '70px' }} min="1"
             />
             <span className="input-label">pts</span>
+            <input
+              type="number" value={requiredAnswers}
+              onChange={e => setRequiredAnswers(parseInt(e.target.value) || 1)}
+              className="input input-sm" style={{ width: '70px' }} min="1"
+            />
+            <span className="input-label">picks</span>
             <button onClick={saveQuestion} className="btn btn-sm btn-primary">Save</button>
             <button onClick={() => setEditing(false)} className="btn btn-sm">Cancel</button>
           </div>
         ) : (
           <>
             <span className="question-text flex-1">{q.text}</span>
-            <span className="question-points">{q.points} pts</span>
+            <span className="question-points">
+              {q.points} pts{isMulti ? ` · pick ${q.required_answers}` : ''}
+            </span>
             <button onClick={() => setEditing(true)} className="btn btn-sm">Edit</button>
             <button onClick={onClone} className="btn btn-sm btn-secondary">Clone</button>
             <button onClick={onDelete} className="btn btn-sm btn-danger">Delete</button>
@@ -170,6 +183,18 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
       <div className="answers-editor">
         {q.answers.map(a => (
           <div key={a.id} className={`answer-edit-item ${a.is_correct ? 'correct' : ''}`}>
+            {isMulti && !q.resolved && (
+              <input
+                type="checkbox"
+                checked={correctIds.includes(a.id)}
+                onChange={() => {
+                  setCorrectIds(prev =>
+                    prev.includes(a.id) ? prev.filter(id => id !== a.id) : [...prev, a.id]
+                  );
+                }}
+                title="Toggle correct"
+              />
+            )}
             <span className="answer-text flex-1">{a.text}</span>
             {editingAnswerId === a.id ? (
               <div className="inline-form" style={{ marginBottom: 0, gap: '0.3rem' }}>
@@ -195,7 +220,7 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
                 {a.points_override != null ? `${a.points_override} pts` : 'Set pts'}
               </button>
             )}
-            {!q.resolved && (
+            {!isMulti && !q.resolved && (
               <button
                 onClick={() => onResolve(a.id)}
                 className="btn btn-xs btn-success"
@@ -224,6 +249,15 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
           <button type="submit" className="btn btn-sm">Add</button>
         </form>
         <button onClick={onAddContestants} className="btn btn-sm btn-secondary">+ All Contestants</button>
+        {isMulti && !q.resolved && (
+          <button
+            onClick={() => onResolve(correctIds)}
+            className="btn btn-sm btn-success"
+            disabled={correctIds.length === 0}
+          >
+            Resolve ({correctIds.length} correct)
+          </button>
+        )}
         {q.resolved && (
           <button onClick={onUnresolve} className="btn btn-sm btn-warning">Unresolve</button>
         )}
@@ -238,6 +272,7 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
   const [lockTime, setLockTime] = useState('');
   const [newQText, setNewQText] = useState('');
   const [newQPoints, setNewQPoints] = useState(1);
+  const [newQRequired, setNewQRequired] = useState(1);
 
   useEffect(() => { loadWeek(); }, [weekId]);
 
@@ -265,9 +300,10 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
     if (!newQText.trim()) {
       return;
     }
-    await api.createQuestion({ week_id: weekId, text: newQText.trim(), points: newQPoints });
+    await api.createQuestion({ week_id: weekId, text: newQText.trim(), points: newQPoints, required_answers: newQRequired });
     setNewQText('');
     setNewQPoints(1);
+    setNewQRequired(1);
     loadWeek();
   }
 
@@ -349,6 +385,12 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
           className="input input-sm" min="1" style={{ width: '70px' }}
         />
         <span className="input-label">pts</span>
+        <input
+          type="number" value={newQRequired}
+          onChange={e => setNewQRequired(parseInt(e.target.value) || 1)}
+          className="input input-sm" min="1" style={{ width: '70px' }}
+        />
+        <span className="input-label">picks</span>
         <button type="submit" className="btn btn-primary">Add Question</button>
       </form>
 
@@ -380,8 +422,9 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
 function TorchesTab({ contestants, onRefresh }) {
   const [torchRankings, setTorchRankings] = useState([]);
   const [message, setMessage] = useState('');
+  const [gamePhase, setGamePhase] = useState('pre_merge');
 
-  useEffect(() => { loadTorches(); }, []);
+  useEffect(() => { loadTorches(); loadPhase(); }, []);
 
   async function loadTorches() {
     try {
@@ -389,6 +432,39 @@ function TorchesTab({ contestants, onRefresh }) {
       setTorchRankings(data);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function loadPhase() {
+    try {
+      const data = await api.getGamePhase();
+      setGamePhase(data.game_phase);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function changePhase(phase) {
+    setMessage('');
+    try {
+      await api.setGamePhase(phase);
+      setGamePhase(phase);
+      setMessage(`Game phase set to ${phase.replace(/_/g, ' ')}!`);
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  async function awardBonus(contestantId, bonusType) {
+    setMessage('');
+    try {
+      const result = await api.awardTorchBonus(contestantId, bonusType);
+      const label = bonusType === 'idol_played' ? 'Idol played' : 'Immunity win';
+      setMessage(`${label}: +${result.amount} to ${result.affected} torch(es) for ${result.contestant_name}!`);
+      loadTorches();
+      onRefresh();
+    } catch (err) {
+      setMessage(err.message);
     }
   }
 
@@ -417,6 +493,8 @@ function TorchesTab({ contestants, onRefresh }) {
   }
 
   const finalists = contestants.filter(c => !c.eliminated || c.torch_final_result);
+  const activeContestants = contestants.filter(c => !c.eliminated);
+  const phaseLabels = { pre_merge: 'Pre-Merge', post_merge: 'Post-Merge', pre_finale: 'Pre-Finale' };
 
   return (
     <div>
@@ -425,6 +503,38 @@ function TorchesTab({ contestants, onRefresh }) {
           {message}
         </div>
       )}
+
+      <h3>Game Phase</h3>
+      <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+        Controls swap and elimination penalty amounts.
+      </p>
+      <div className="inline-form" style={{ marginBottom: '1.5rem' }}>
+        {Object.entries(phaseLabels).map(([key, label]) => (
+          <button
+            key={key}
+            className={`btn btn-sm ${gamePhase === key ? 'btn-primary' : ''}`}
+            onClick={() => changePhase(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <h3>Award Bonuses</h3>
+      <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+        Awards points to all players carrying a torch for this contestant.
+      </p>
+      <div className="torch-resolve-list" style={{ marginBottom: '1.5rem' }}>
+        {activeContestants.map(c => (
+          <div key={c.id} className="torch-resolve-item">
+            <span className="contestant-name">{c.name}</span>
+            <div className="torch-resolve-actions">
+              <button onClick={() => awardBonus(c.id, 'idol_played')} className="btn btn-xs btn-primary">Idol +2</button>
+              <button onClick={() => awardBonus(c.id, 'immunity_win')} className="btn btn-xs btn-secondary">Immunity +1</button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <h3>Season Results</h3>
       <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>

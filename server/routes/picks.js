@@ -11,16 +11,16 @@ router.post('/', requireAuth, async (req, res) => {
   }
 
   try {
-    const questionIds = picks.map(p => p.question_id);
-    const ph = questionIds.map((_, i) => `$${i + 1}`).join(',');
+    const uniqueQIds = [...new Set(picks.map(p => p.question_id))];
+    const ph = uniqueQIds.map((_, i) => `$${i + 1}`).join(',');
     const { rows: questions } = await query(
-      `SELECT q.id, w.lock_time FROM questions q
+      `SELECT q.id, q.required_answers, w.lock_time FROM questions q
        JOIN weeks w ON q.week_id = w.id
        WHERE q.id IN (${ph})`,
-      questionIds
+      uniqueQIds
     );
 
-    if (questions.length !== picks.length) {
+    if (questions.length !== uniqueQIds.length) {
       return res.status(400).json({ error: 'Invalid question IDs' });
     }
 
@@ -30,13 +30,37 @@ router.post('/', requireAuth, async (req, res) => {
       }
     }
 
+    const reqMap = {};
+    for (const q of questions) {
+      reqMap[q.id] = q.required_answers || 1;
+    }
+    const picksByQ = {};
+    for (const p of picks) {
+      if (!picksByQ[p.question_id]) {
+        picksByQ[p.question_id] = [];
+      }
+      picksByQ[p.question_id].push(p);
+    }
+    for (const [qId, qPicks] of Object.entries(picksByQ)) {
+      const required = reqMap[parseInt(qId)];
+      if (qPicks.length !== required) {
+        return res.status(400).json({
+          error: `Question requires exactly ${required} answer(s), got ${qPicks.length}`
+        });
+      }
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const delPh = uniqueQIds.map((_, i) => `$${i + 2}`).join(',');
+      await client.query(
+        `DELETE FROM picks WHERE user_id = $1 AND question_id IN (${delPh})`,
+        [req.user.id, ...uniqueQIds]
+      );
       for (const pick of picks) {
         await client.query(
-          `INSERT INTO picks (user_id, question_id, answer_id) VALUES ($1, $2, $3)
-           ON CONFLICT(user_id, question_id) DO UPDATE SET answer_id = EXCLUDED.answer_id, created_at = NOW()`,
+          'INSERT INTO picks (user_id, question_id, answer_id) VALUES ($1, $2, $3)',
           [req.user.id, pick.question_id, pick.answer_id]
         );
       }
@@ -73,11 +97,11 @@ router.get('/rankings', requireAuth, async (req, res) => {
     );
 
     const answerMap = {};
-    const correctMap = {};
+    const correctAnswerIds = new Set();
     for (const a of allAnswers) {
       answerMap[a.id] = a;
       if (a.is_correct) {
-        correctMap[a.question_id] = a;
+        correctAnswerIds.add(a.id);
       }
     }
 
@@ -106,9 +130,9 @@ router.get('/rankings', requireAuth, async (req, res) => {
           continue;
         }
         if (q.resolved) {
-          const correct = correctMap[q.id];
-          if (correct && pick.answer_id === correct.id) {
-            const earned = correct.points_override ?? q.points;
+          if (correctAnswerIds.has(pick.answer_id)) {
+            const pickedAnswer = answerMap[pick.answer_id];
+            const earned = pickedAnswer?.points_override ?? q.points;
             score += earned;
             potentialScore += earned;
           }

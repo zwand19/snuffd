@@ -403,6 +403,18 @@ body {
   border: 1px solid rgba(192, 57, 43, 0.3);
 }
 
+.alert-torch-nudge {
+  background: rgba(243, 156, 18, 0.15);
+  color: var(--warning, #f39c12);
+  border: 1px solid rgba(243, 156, 18, 0.3);
+}
+
+.alert-torch-nudge a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
 /* ===== Question Cards ===== */
 .question-card { border-left: 3px solid var(--accent); }
 .question-card.resolved { border-left-color: var(--success); }

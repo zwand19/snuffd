@@ -71,7 +71,7 @@ router.get('/:id', requireAuth, async (req, res) => {
         ...q,
         answers: answers.filter(a => a.question_id === q.id),
         picks: picks.filter(p => p.question_id === q.id),
-        my_pick: myPicks.find(p => p.question_id === q.id) || null,
+        my_picks: myPicks.filter(p => p.question_id === q.id),
       })),
     });
   } catch (err) {

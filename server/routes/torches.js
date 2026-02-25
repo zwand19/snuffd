@@ -102,11 +102,11 @@ router.post('/pick', requireAuth, async (req, res) => {
       [req.user.id]
     );
 
-    let pointsBefore, pointsAfter, action;
+    let pointsBefore, pointsAfter, action, penalty = 0;
 
     if (!existing) {
-      pointsBefore = 20;
-      pointsAfter = 20;
+      pointsBefore = 35;
+      pointsAfter = 35;
       action = 'initial';
       await client.query(
         'INSERT INTO torches (user_id, contestant_id, points) VALUES ($1, $2, 35)',
@@ -124,9 +124,22 @@ router.post('/pick', requireAuth, async (req, res) => {
         [contestant_id, req.user.id]
       );
     } else {
+      const { rows: [lockedWeek] } = await client.query(
+        "SELECT 1 FROM weeks WHERE lock_time <= NOW() LIMIT 1"
+      );
       pointsBefore = existing.points;
-      pointsAfter = Math.max(0, existing.points - 1);
-      action = 'switch';
+      if (!lockedWeek) {
+        pointsAfter = existing.points;
+        action = 'free_switch';
+      } else {
+        const { rows: [phaseSetting] } = await client.query(
+          "SELECT value FROM game_settings WHERE key = 'game_phase'"
+        );
+        const phase = phaseSetting?.value || 'pre_merge';
+        penalty = phase === 'pre_finale' ? 4 : phase === 'post_merge' ? 3 : 2;
+        pointsAfter = Math.max(0, existing.points - penalty);
+        action = 'switch';
+      }
       await client.query(
         'UPDATE torches SET contestant_id = $1, points = $2 WHERE user_id = $3',
         [contestant_id, pointsAfter, req.user.id]
@@ -146,6 +159,7 @@ router.post('/pick', requireAuth, async (req, res) => {
       contestant_name: contestant.name,
       points: pointsAfter,
       action,
+      penalty,
       needs_switch: 0,
     });
   } catch (err) {
@@ -169,14 +183,58 @@ router.get('/rankings', requireAuth, async (req, res) => {
        ORDER BY t.points DESC`
     );
 
+    const winnerContestant = torches.find(t => t.torch_final_result === 'winner');
+    const winnerId = winnerContestant?.contestant_id;
+
+    let lockedWeeks = [];
+    let allHistory = [];
+    if (winnerContestant) {
+      const { rows: wks } = await query(
+        "SELECT id, week_number, lock_time FROM weeks WHERE lock_time <= NOW() ORDER BY week_number DESC"
+      );
+      lockedWeeks = wks;
+      const { rows: hist } = await query(
+        'SELECT user_id, contestant_id, action, created_at FROM torch_history ORDER BY created_at ASC'
+      );
+      allHistory = hist;
+    }
+
     const rankings = torches.map(t => {
       let torchScore = null;
-      if (t.torch_final_result === 'winner') {
-        torchScore = t.points;
-      } else if (t.torch_final_result === 'runner_up') {
+      let consecutiveWeeks = 0;
+      let switchedOffWinner = false;
+
+      if (winnerId) {
+        const userHist = allHistory.filter(h => h.user_id === t.user_id);
+        const everHeldWinner = userHist.some(h => h.contestant_id === winnerId);
+        if (everHeldWinner && t.contestant_id !== winnerId) {
+          switchedOffWinner = true;
+        }
+
+        if (t.torch_final_result === 'winner') {
+          for (const wk of lockedWeeks) {
+            const entryAtLock = [...userHist]
+              .filter(h => new Date(h.created_at) <= new Date(wk.lock_time))
+              .pop();
+            if (entryAtLock && entryAtLock.contestant_id === t.contestant_id) {
+              consecutiveWeeks++;
+            } else {
+              break;
+            }
+          }
+          consecutiveWeeks = Math.min(consecutiveWeeks, 6);
+          torchScore = t.points + consecutiveWeeks;
+        }
+      }
+
+      if (t.torch_final_result === 'runner_up') {
         torchScore = Math.floor(t.points / 2);
       } else if (t.torch_final_result === 'final_week') {
         torchScore = Math.floor(t.points / 3);
+      }
+
+      if (torchScore !== null && switchedOffWinner) {
+        torchScore = Math.floor(torchScore * 0.7);
       }
 
       return {
@@ -188,6 +246,8 @@ router.get('/rankings', requireAuth, async (req, res) => {
         needs_switch: t.needs_switch,
         torch_final_result: t.torch_final_result,
         torchScore,
+        consecutiveWeeks: t.torch_final_result === 'winner' ? consecutiveWeeks : undefined,
+        switchedOffWinner: switchedOffWinner || undefined,
       };
     });
 
@@ -219,6 +279,44 @@ router.post('/resolve', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/award', requireAdmin, async (req, res) => {
+  const { contestant_id, bonus_type } = req.body;
+  const bonuses = { idol_played: 2, immunity_win: 1 };
+  if (!contestant_id || !bonuses[bonus_type]) {
+    return res.status(400).json({ error: 'contestant_id and bonus_type (idol_played | immunity_win) required' });
+  }
+  const amount = bonuses[bonus_type];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: affected } = await client.query(
+      'SELECT * FROM torches WHERE contestant_id = $1',
+      [contestant_id]
+    );
+    for (const torch of affected) {
+      const newPoints = torch.points + amount;
+      await client.query(
+        'UPDATE torches SET points = $1 WHERE id = $2',
+        [newPoints, torch.id]
+      );
+      await client.query(
+        `INSERT INTO torch_history (user_id, contestant_id, action, points_before, points_after)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [torch.user_id, contestant_id, bonus_type, torch.points, newPoints]
+      );
+    }
+    await client.query('COMMIT');
+    const { rows: [c] } = await query('SELECT name FROM contestants WHERE id = $1', [contestant_id]);
+    res.json({ success: true, affected: affected.length, contestant_name: c?.name, amount });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 

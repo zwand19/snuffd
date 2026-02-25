@@ -55,12 +55,18 @@ router.put('/:id', requireAdmin, async (req, res) => {
     const updated = rows[0];
 
     if (eliminated && updated.eliminated) {
+      const { rows: [phaseSetting] } = await client.query(
+        "SELECT value FROM game_settings WHERE key = 'game_phase'"
+      );
+      const phase = phaseSetting?.value || 'pre_merge';
+      const elimPenalty = (phase === 'post_merge' || phase === 'pre_finale') ? 6 : 4;
+
       const { rows: affected } = await client.query(
         'SELECT * FROM torches WHERE contestant_id = $1',
         [updated.id]
       );
       for (const torch of affected) {
-        const newPoints = Math.max(0, torch.points - 3);
+        const newPoints = Math.max(0, torch.points - elimPenalty);
         await client.query(
           'UPDATE torches SET points = $1, needs_switch = 1 WHERE id = $2',
           [newPoints, torch.id]
