@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { api, setGetToken, setOnAuthError } from './api';
@@ -11,17 +11,13 @@ export default function App() {
   const [dbUser, setDbUser] = useState(null);
   const [appError, setAppError] = useState(null);
 
-  const handleAuthError = useCallback(() => {
-    setAppError('session_expired');
-  }, []);
-
-  useEffect(() => {
-    setOnAuthError(handleAuthError);
-  }, [handleAuthError]);
+  setOnAuthError(() => setAppError('session_expired'));
+  if (isAuthenticated) {
+    setGetToken(getAccessTokenSilently);
+  }
 
   useEffect(() => {
     if (isAuthenticated) {
-      setGetToken(getAccessTokenSilently);
       setAppError(null);
       api.syncUser({ email: user.email, name: user.name })
         .then(setDbUser)
