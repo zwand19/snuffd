@@ -8,6 +8,7 @@ const weeksRoutes = require('./routes/weeks');
 const contestantsRoutes = require('./routes/contestants');
 const picksRoutes = require('./routes/picks');
 const questionsRoutes = require('./routes/questions');
+const torchesRoutes = require('./routes/torches');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +29,7 @@ app.use('/api/weeks', jwtCheck, loadUser, weeksRoutes);
 app.use('/api/contestants', jwtCheck, loadUser, contestantsRoutes);
 app.use('/api/picks', jwtCheck, loadUser, picksRoutes);
 app.use('/api/questions', jwtCheck, loadUser, questionsRoutes);
+app.use('/api/torches', jwtCheck, loadUser, torchesRoutes);
 
 initDb()
   .then(() => {

@@ -335,6 +335,115 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
   );
 }
 
+function TorchesTab({ contestants, onRefresh }) {
+  const [torchRankings, setTorchRankings] = useState([]);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => { loadTorches(); }, []);
+
+  async function loadTorches() {
+    try {
+      const data = await api.getTorchRankings();
+      setTorchRankings(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function resolve(contestantId, result) {
+    setMessage('');
+    try {
+      await api.resolveTorch(contestantId, result);
+      setMessage(`Resolved as ${result.replace('_', ' ')}`);
+      loadTorches();
+      onRefresh();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  async function unresolve(contestantId) {
+    setMessage('');
+    try {
+      await api.unresolveTorch(contestantId);
+      setMessage('Result cleared');
+      loadTorches();
+      onRefresh();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  }
+
+  const finalists = contestants.filter(c => !c.eliminated || c.torch_final_result);
+
+  return (
+    <div>
+      {message && (
+        <div className={`alert ${message.includes('!') || !message.includes('error') ? 'alert-success' : 'alert-error'}`}>
+          {message}
+        </div>
+      )}
+
+      <h3>Season Results</h3>
+      <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
+        Set final placements to calculate torch bonus scores.
+      </p>
+      <div className="torch-resolve-list">
+        {finalists.map(c => (
+          <div key={c.id} className="torch-resolve-item">
+            <span className="contestant-name">{c.name}</span>
+            {c.torch_final_result ? (
+              <div className="torch-resolve-actions">
+                <span className="badge badge-resolved">{c.torch_final_result.replace('_', ' ')}</span>
+                <button onClick={() => unresolve(c.id)} className="btn btn-xs btn-ghost">Clear</button>
+              </div>
+            ) : (
+              <div className="torch-resolve-actions">
+                <button onClick={() => resolve(c.id, 'winner')} className="btn btn-xs btn-success">Winner</button>
+                <button onClick={() => resolve(c.id, 'runner_up')} className="btn btn-xs btn-warning">Runner-Up</button>
+                <button onClick={() => resolve(c.id, 'final_week')} className="btn btn-xs">Final Week</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <h3 style={{ marginTop: '2rem' }}>Torch Standings</h3>
+      <div className="table-wrap">
+        <table className="rankings-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Carrying For</th>
+              <th>Points</th>
+              <th>Status</th>
+              {torchRankings.some(t => t.torchScore !== null) && <th>Final Score</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {torchRankings.map(t => (
+              <tr key={t.user_id}>
+                <td>{t.user_name}</td>
+                <td>{t.contestant_name || '—'}</td>
+                <td className="score-cell">{t.points}</td>
+                <td>
+                  {t.needs_switch ? <span className="badge badge-warning">Must Switch</span> : <span className="badge badge-open">Active</span>}
+                </td>
+                {torchRankings.some(tr => tr.torchScore !== null) && (
+                  <td className="torch-score-cell">{t.torchScore ?? '—'}</td>
+                )}
+              </tr>
+            ))}
+            {torchRankings.length === 0 && (
+              <tr><td colSpan="5" className="empty-cell">No torches yet</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel() {
   const [tab, setTab] = useState('weeks');
   const [contestants, setContestants] = useState([]);
@@ -378,7 +487,7 @@ export default function AdminPanel() {
     <div className="admin-panel">
       <h1>⚙️ Admin Panel</h1>
       <div className="tab-bar">
-        {['weeks', 'contestants', 'users'].map(t => (
+        {['weeks', 'contestants', 'torches', 'users'].map(t => (
           <button
             key={t}
             className={`tab-btn ${tab === t ? 'active' : ''}`}
@@ -391,6 +500,10 @@ export default function AdminPanel() {
 
       {tab === 'contestants' && (
         <ContestantsTab contestants={contestants} onRefresh={loadAll} />
+      )}
+
+      {tab === 'torches' && (
+        <TorchesTab contestants={contestants} onRefresh={loadAll} />
       )}
 
       {tab === 'users' && (

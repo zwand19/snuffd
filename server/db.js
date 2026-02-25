@@ -63,6 +63,26 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id, question_id)
     );
+
+    CREATE TABLE IF NOT EXISTS torches (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+      contestant_id INTEGER REFERENCES contestants(id),
+      points INTEGER DEFAULT 20,
+      needs_switch INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS torch_history (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      contestant_id INTEGER NOT NULL REFERENCES contestants(id),
+      action TEXT NOT NULL DEFAULT 'pick',
+      points_before INTEGER NOT NULL,
+      points_after INTEGER NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    ALTER TABLE contestants ADD COLUMN IF NOT EXISTS torch_final_result TEXT;
   `);
 }
 

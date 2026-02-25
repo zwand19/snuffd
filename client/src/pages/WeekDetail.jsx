@@ -10,6 +10,7 @@ export default function WeekDetail({ user }) {
   const [picks, setPicks] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+  const [torchAssignments, setTorchAssignments] = useState([]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -19,8 +20,12 @@ export default function WeekDetail({ user }) {
 
   async function loadWeek() {
     try {
-      const data = await api.getWeek(id);
+      const [data, torches] = await Promise.all([
+        api.getWeek(id),
+        api.getTorchWeek(id),
+      ]);
       setWeek(data);
+      setTorchAssignments(torches);
       const existing = {};
       for (const q of data.questions) {
         if (q.my_pick) {
@@ -90,6 +95,23 @@ export default function WeekDetail({ user }) {
           </span>
         </div>
       </div>
+
+      {torchAssignments.length > 0 && (
+        <div className="card torch-week-card">
+          <div className="card-header">
+            <h2>🔦 Torches This Week</h2>
+          </div>
+          <div className="torch-assignments">
+            {torchAssignments.map(ta => (
+              <div key={ta.user_id} className={`torch-assignment ${ta.user_id === user?.id ? 'highlight-row' : ''}`}>
+                <span className="torch-user">{ta.user_name}</span>
+                <span className="torch-arrow">→</span>
+                <span className="torch-contestant">{ta.contestant_name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {message && (
         <div className={`alert ${message.includes('!') ? 'alert-success' : 'alert-error'}`}>

@@ -51,4 +51,12 @@ export const api = {
   submitPicks: (picks) => request('/api/picks', { method: 'POST', body: JSON.stringify({ picks }) }),
   getRankings: () => request('/api/picks/rankings'),
   getSubmissionStatus: (weekId) => request(`/api/picks/status/${weekId}`),
+
+  getTorches: () => request('/api/torches'),
+  getTorchHistory: () => request('/api/torches/history'),
+  getTorchWeek: (weekId) => request(`/api/torches/week/${weekId}`),
+  pickTorch: (contestant_id) => request('/api/torches/pick', { method: 'POST', body: JSON.stringify({ contestant_id }) }),
+  getTorchRankings: () => request('/api/torches/rankings'),
+  resolveTorch: (contestant_id, result) => request('/api/torches/resolve', { method: 'POST', body: JSON.stringify({ contestant_id, result }) }),
+  unresolveTorch: (contestant_id) => request('/api/torches/unresolve', { method: 'POST', body: JSON.stringify({ contestant_id }) }),
 };

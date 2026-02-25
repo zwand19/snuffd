@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { query } = require('../db');
+const { pool, query } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const router = Router();
@@ -45,15 +45,42 @@ router.put('/:id', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'No updates' });
   }
   values.push(req.params.id);
+  const client = await pool.connect();
   try {
-    const { rows } = await query(
+    await client.query('BEGIN');
+    const { rows } = await client.query(
       `UPDATE contestants SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING *`,
       values
     );
-    res.json(rows[0]);
+    const updated = rows[0];
+
+    if (eliminated && updated.eliminated) {
+      const { rows: affected } = await client.query(
+        'SELECT * FROM torches WHERE contestant_id = $1',
+        [updated.id]
+      );
+      for (const torch of affected) {
+        const newPoints = Math.max(0, torch.points - 3);
+        await client.query(
+          'UPDATE torches SET points = $1, needs_switch = 1 WHERE id = $2',
+          [newPoints, torch.id]
+        );
+        await client.query(
+          `INSERT INTO torch_history (user_id, contestant_id, action, points_before, points_after)
+           VALUES ($1, $2, 'eliminated', $3, $4)`,
+          [torch.user_id, updated.id, torch.points, newPoints]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json(updated);
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 

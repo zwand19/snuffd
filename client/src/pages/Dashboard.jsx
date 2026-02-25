@@ -9,6 +9,11 @@ export default function Dashboard({ user }) {
   const [rankings, setRankings] = useState([]);
   const [upcomingWeek, setUpcomingWeek] = useState(null);
   const [submissionStatus, setSubmissionStatus] = useState(null);
+  const [torchRankings, setTorchRankings] = useState([]);
+  const [myTorch, setMyTorch] = useState(null);
+  const [contestants, setContestants] = useState([]);
+  const [showTorchPicker, setShowTorchPicker] = useState(false);
+  const [torchMessage, setTorchMessage] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -19,12 +24,21 @@ export default function Dashboard({ user }) {
 
   async function loadData() {
     try {
-      const [weeksData, rankingsData] = await Promise.all([
+      const [weeksData, rankingsData, torchData, contestantsData] = await Promise.all([
         api.getWeeks(),
         api.getRankings(),
+        api.getTorchRankings(),
+        api.getContestants(),
       ]);
       setWeeks(weeksData);
       setRankings(rankingsData);
+      setTorchRankings(torchData);
+      setContestants(contestantsData);
+
+      if (user) {
+        const mine = torchData.find(t => t.user_id === user.id);
+        setMyTorch(mine || null);
+      }
 
       const now = new Date();
       const upcoming = weeksData.find(w => new Date(w.lock_time) > now);
@@ -35,6 +49,24 @@ export default function Dashboard({ user }) {
       }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
+    }
+  }
+
+  async function handleTorchPick(contestantId) {
+    setTorchMessage('');
+    try {
+      const result = await api.pickTorch(contestantId);
+      setTorchMessage(
+        result.action === 'initial'
+          ? `Torch lit for ${result.contestant_name}!`
+          : result.action === 'forced_switch'
+            ? `Switched torch to ${result.contestant_name} (no penalty)`
+            : `Switched torch to ${result.contestant_name} (-1 point)`
+      );
+      setShowTorchPicker(false);
+      loadData();
+    } catch (err) {
+      setTorchMessage(err.message);
     }
   }
 
@@ -126,6 +158,91 @@ export default function Dashboard({ user }) {
               ))}
               {rankings.length === 0 && (
                 <tr><td colSpan="4" className="empty-cell">No scores yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2>🔦 Torch Standings</h2>
+          {!myTorch ? (
+            <button onClick={() => setShowTorchPicker(true)} className="btn btn-primary btn-sm">
+              Light Your Torch
+            </button>
+          ) : (
+            <button onClick={() => setShowTorchPicker(!showTorchPicker)} className="btn btn-sm">
+              {showTorchPicker ? 'Cancel' : 'Switch Torch'}
+            </button>
+          )}
+        </div>
+
+        {torchMessage && (
+          <div className={`alert ${torchMessage.includes('!') ? 'alert-success' : 'alert-error'}`}>
+            {torchMessage}
+          </div>
+        )}
+
+        {myTorch && (
+          <div className="torch-my-status">
+            <span className="torch-icon">🔦</span>
+            <span>
+              Your torch: <strong>{myTorch.contestant_name}</strong> — <strong>{myTorch.points}</strong> pts
+            </span>
+            {myTorch.needs_switch ? (
+              <span className="badge badge-warning">Must Switch</span>
+            ) : null}
+          </div>
+        )}
+
+        {showTorchPicker && (
+          <div className="torch-picker">
+            <h4>Pick a contestant to carry your torch</h4>
+            {!myTorch && <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Your torch starts at 20 points. Switching later costs 1 point.</p>}
+            <div className="torch-picker-grid">
+              {contestants.filter(c => !c.eliminated).map(c => (
+                <button
+                  key={c.id}
+                  className={`torch-pick-btn ${myTorch?.contestant_id === c.id ? 'current' : ''}`}
+                  onClick={() => handleTorchPick(c.id)}
+                  disabled={myTorch?.contestant_id === c.id}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="table-wrap">
+          <table className="rankings-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Player</th>
+                <th>Carrying For</th>
+                <th>Pts</th>
+                {torchRankings.some(t => t.torchScore !== null) && <th>Score</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {torchRankings.map((t, i) => (
+                <tr key={t.user_id} className={t.user_id === user?.id ? 'highlight-row' : ''}>
+                  <td className="rank-cell">{i + 1}</td>
+                  <td>{t.user_name}</td>
+                  <td className="torch-contestant-cell">
+                    {t.contestant_name || '—'}
+                    {t.needs_switch ? <span className="badge badge-warning" style={{ marginLeft: '0.5rem' }}>Must Switch</span> : null}
+                  </td>
+                  <td className="score-cell">{t.points}</td>
+                  {torchRankings.some(tr => tr.torchScore !== null) && (
+                    <td className="torch-score-cell">{t.torchScore ?? '—'}</td>
+                  )}
+                </tr>
+              ))}
+              {torchRankings.length === 0 && (
+                <tr><td colSpan="5" className="empty-cell">No torches yet</td></tr>
               )}
             </tbody>
           </table>

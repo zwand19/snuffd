@@ -709,6 +709,122 @@ body {
   flex-wrap: wrap;
 }
 
+/* ===== Torches ===== */
+.torch-my-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(232, 127, 0, 0.08);
+  border: 1px solid rgba(232, 127, 0, 0.25);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.torch-icon { font-size: 1.3rem; }
+
+.torch-picker {
+  padding: 1rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.torch-picker h4 {
+  color: var(--gold);
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.torch-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.torch-pick-btn {
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.torch-pick-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(232, 127, 0, 0.1);
+}
+
+.torch-pick-btn.current {
+  border-color: var(--accent);
+  background: rgba(232, 127, 0, 0.15);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.torch-contestant-cell { color: var(--text-secondary); }
+.torch-score-cell { color: var(--gold); font-weight: 700; }
+
+.badge-warning {
+  background: rgba(243, 156, 18, 0.2);
+  color: var(--warning);
+}
+
+.torch-week-card { border-left: 3px solid var(--accent); }
+
+.torch-assignments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.torch-assignment {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.torch-assignment.highlight-row {
+  border-color: var(--accent);
+  background: rgba(232, 127, 0, 0.08);
+}
+
+.torch-user { color: var(--text-secondary); font-weight: 500; }
+.torch-arrow { color: var(--text-muted); }
+.torch-contestant { color: var(--accent); font-weight: 600; }
+
+.torch-resolve-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.torch-resolve-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.torch-resolve-actions { display: flex; gap: 0.4rem; align-items: center; }
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .navbar { padding: 0.75rem 1rem; }
