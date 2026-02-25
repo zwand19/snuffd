@@ -1,23 +1,59 @@
 let getTokenFn = null;
+let onAuthError = null;
 
 export function setGetToken(fn) {
   getTokenFn = fn;
 }
 
+export function setOnAuthError(fn) {
+  onAuthError = fn;
+}
+
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function request(path, options = {}) {
-  const token = getTokenFn ? await getTokenFn() : null;
+  let token;
+  try {
+    token = getTokenFn ? await getTokenFn() : null;
+  } catch {
+    if (onAuthError) {
+      onAuthError('session_expired');
+    }
+    throw new ApiError('Session expired', 401);
+  }
+
   const headers = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
-  const res = await fetch(BASE_URL + path, { ...options, headers });
+
+  let res;
+  try {
+    res = await fetch(BASE_URL + path, { ...options, headers });
+  } catch {
+    throw new ApiError('Unable to reach the server. It may be waking up — try again in a moment.', 0);
+  }
+
+  if (res.status === 401) {
+    if (onAuthError) {
+      onAuthError('session_expired');
+    }
+    throw new ApiError('Session expired — please log in again.', 401);
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(err.error || 'Request failed');
+    throw new ApiError(err.error || 'Request failed', res.status);
   }
+
   return res.json();
 }
 

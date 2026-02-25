@@ -898,6 +898,35 @@ body {
 
 .torch-resolve-actions { display: flex; gap: 0.4rem; align-items: center; }
 
+/* ===== App Banner ===== */
+.app-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: center;
+  flex-wrap: wrap;
+}
+
+.app-banner-error {
+  background: linear-gradient(90deg, #3d1111, #5a1a1a);
+  color: #ffb3b3;
+  border-bottom: 1px solid var(--danger);
+}
+
+.app-banner-warning {
+  background: linear-gradient(90deg, #3d2e05, #5a4210);
+  color: #ffe0a3;
+  border-bottom: 1px solid var(--warning);
+}
+
+.app-banner .btn {
+  white-space: nowrap;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .navbar { padding: 0.75rem 1rem; }

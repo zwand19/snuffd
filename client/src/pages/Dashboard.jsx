@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { api } from '../api';
 
-export default function Dashboard({ user }) {
+export default function Dashboard({ user, setAppError }) {
   const { isAuthenticated, loginWithRedirect } = useAuth0();
   const [weeks, setWeeks] = useState([]);
   const [rankings, setRankings] = useState([]);
@@ -49,6 +49,9 @@ export default function Dashboard({ user }) {
       }
     } catch (err) {
       console.error('Failed to load dashboard:', err);
+      if (setAppError) {
+        setAppError(err.status === 0 ? 'server_down' : err.status === 401 ? 'session_expired' : null);
+      }
     }
   }
 

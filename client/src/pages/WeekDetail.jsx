@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { api } from '../api';
 
-export default function WeekDetail({ user }) {
+export default function WeekDetail({ user, setAppError }) {
   const { id } = useParams();
   const { isAuthenticated, loginWithRedirect } = useAuth0();
   const [week, setWeek] = useState(null);
@@ -36,6 +36,9 @@ export default function WeekDetail({ user }) {
       setPicks(existing);
     } catch (err) {
       console.error('Failed to load week:', err);
+      if (setAppError) {
+        setAppError(err.status === 0 ? 'server_down' : err.status === 401 ? 'session_expired' : null);
+      }
     }
   }
 

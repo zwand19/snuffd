@@ -486,7 +486,7 @@ function TorchesTab({ contestants, onRefresh }) {
   );
 }
 
-export default function AdminPanel() {
+export default function AdminPanel({ setAppError }) {
   const [tab, setTab] = useState('weeks');
   const [contestants, setContestants] = useState([]);
   const [weeks, setWeeks] = useState([]);
@@ -497,14 +497,21 @@ export default function AdminPanel() {
   useEffect(() => { loadAll(); }, []);
 
   async function loadAll() {
-    const [c, w, u] = await Promise.all([
-      api.getContestants(),
-      api.getWeeks(),
-      api.getUsers(),
-    ]);
-    setContestants(c);
-    setWeeks(w);
-    setUsers(u);
+    try {
+      const [c, w, u] = await Promise.all([
+        api.getContestants(),
+        api.getWeeks(),
+        api.getUsers(),
+      ]);
+      setContestants(c);
+      setWeeks(w);
+      setUsers(u);
+    } catch (err) {
+      console.error('Failed to load admin data:', err);
+      if (setAppError) {
+        setAppError(err.status === 0 ? 'server_down' : err.status === 401 ? 'session_expired' : null);
+      }
+    }
   }
 
   async function createWeek(e) {

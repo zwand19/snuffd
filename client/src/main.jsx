@@ -15,9 +15,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Auth0Provider
         domain={domain}
         clientId={clientId}
+        useRefreshTokens={true}
+        cacheLocation="localstorage"
         authorizationParams={{
           redirect_uri: window.location.origin + (window.location.pathname.includes('/snuffd') ? '/snuffd' : ''),
           audience,
+          scope: 'openid profile email offline_access',
         }}
       >
         <App />
