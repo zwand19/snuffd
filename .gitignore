@@ -1,0 +1,6 @@
+node_modules/
+.env
+snuffd.db
+snuffd.db-shm
+snuffd.db-wal
+client/dist/
