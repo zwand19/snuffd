@@ -11,6 +11,7 @@ export default function WeekDetail({ user }) {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
   const [torchAssignments, setTorchAssignments] = useState([]);
+  const [expandedQuestions, setExpandedQuestions] = useState({});
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -49,6 +50,8 @@ export default function WeekDetail({ user }) {
       }));
       await api.submitPicks(pickArray);
       setMessage('Picks submitted!');
+      setExpandedQuestions({});
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       loadWeek();
     } catch (err) {
       setMessage(err.message);
@@ -120,74 +123,100 @@ export default function WeekDetail({ user }) {
       )}
 
       <form onSubmit={handleSubmit}>
-        {week.questions.map((q, qi) => (
-          <div key={q.id} className={`card question-card ${q.resolved ? 'resolved' : ''}`}>
-            <div className="question-header">
-              <span className="question-number">Q{qi + 1}</span>
-              <span className="question-text">{q.text}</span>
-              <span className="question-points">
-                {q.points} pt{q.points !== 1 ? 's' : ''}
-              </span>
-              {q.resolved && <span className="badge badge-resolved">✓ Resolved</span>}
-            </div>
+        {week.questions.map((q, qi) => {
+          const pickedAnswer = picks[q.id] ? q.answers.find(a => a.id === picks[q.id]) : null;
+          const isCollapsed = !isLocked && pickedAnswer && !expandedQuestions[q.id];
 
-            <div className="answers-list">
-              {q.answers.map(a => {
-                const isSelected = picks[q.id] === a.id;
-                const isCorrect = a.is_correct;
-                const wasMyPick = q.my_pick?.answer_id === a.id;
+          return (
+            <div key={q.id} className={`card question-card ${q.resolved ? 'resolved' : ''}`}>
+              <div className="question-header">
+                <span className="question-number">Q{qi + 1}</span>
+                <span className="question-text">{q.text}</span>
+                <span className="question-points">
+                  {q.points} pt{q.points !== 1 ? 's' : ''}
+                </span>
+                {q.resolved && <span className="badge badge-resolved">✓ Resolved</span>}
+              </div>
 
-                return (
-                  <label
-                    key={a.id}
-                    className={[
-                      'answer-option',
-                      isSelected ? 'selected' : '',
-                      isLocked && isCorrect ? 'correct' : '',
-                      isLocked && wasMyPick && !isCorrect && q.resolved ? 'incorrect' : '',
-                    ].join(' ')}
-                  >
-                    {!isLocked && (
-                      <input
-                        type="radio"
-                        name={`q-${q.id}`}
-                        value={a.id}
-                        checked={isSelected}
-                        onChange={() => setPicks({ ...picks, [q.id]: a.id })}
-                      />
+              {isCollapsed ? (
+                <div className="answers-list">
+                  <div className="answer-option selected">
+                    <span className="answer-text">{pickedAnswer.text}</span>
+                    {pickedAnswer.points_override != null && (
+                      <span className="answer-points">{pickedAnswer.points_override} pts</span>
                     )}
-                    <span className="answer-text">{a.text}</span>
-                    {a.points_override != null && (
-                      <span className="answer-points">{a.points_override} pts</span>
-                    )}
-                    {isLocked && isCorrect && <span className="correct-marker">✓</span>}
-                    {isLocked && wasMyPick && <span className="my-pick-marker">Your pick</span>}
-                  </label>
-                );
-              })}
-            </div>
-
-            {isLocked && q.picks && q.picks.length > 0 && (
-              <div className="pick-summary">
-                <h4>Picks</h4>
-                <div className="pick-list">
+                    <button
+                      type="button"
+                      className="btn btn-xs"
+                      onClick={() => setExpandedQuestions({ ...expandedQuestions, [q.id]: true })}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="answers-list">
                   {q.answers.map(a => {
-                    const pickers = q.picks.filter(p => p.answer_id === a.id);
-                    if (pickers.length === 0) {
-                      return null;
-                    }
+                    const isSelected = picks[q.id] === a.id;
+                    const isCorrect = a.is_correct;
+                    const wasMyPick = q.my_pick?.answer_id === a.id;
+
                     return (
-                      <div key={a.id} className={`pick-group ${a.is_correct ? 'correct-group' : ''}`}>
-                        <span className="pick-answer">{a.text}:</span>
-                        <span className="pick-users">{pickers.map(p => p.user_name).join(', ')}</span>
-                      </div>
+                      <label
+                        key={a.id}
+                        className={[
+                          'answer-option',
+                          isSelected ? 'selected' : '',
+                          isLocked && isCorrect ? 'correct' : '',
+                          isLocked && wasMyPick && !isCorrect && q.resolved ? 'incorrect' : '',
+                        ].join(' ')}
+                      >
+                        {!isLocked && (
+                          <input
+                            type="radio"
+                            name={`q-${q.id}`}
+                            value={a.id}
+                            checked={isSelected}
+                            onChange={() => {
+                              setPicks({ ...picks, [q.id]: a.id });
+                              setExpandedQuestions({ ...expandedQuestions, [q.id]: false });
+                            }}
+                          />
+                        )}
+                        <span className="answer-text">{a.text}</span>
+                        {a.points_override != null && (
+                          <span className="answer-points">{a.points_override} pts</span>
+                        )}
+                        {isLocked && isCorrect && <span className="correct-marker">✓</span>}
+                        {isLocked && wasMyPick && <span className="my-pick-marker">Your pick</span>}
+                      </label>
                     );
                   })}
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+
+              {isLocked && q.picks && q.picks.length > 0 && (
+                <div className="pick-summary">
+                  <h4>Picks</h4>
+                  <div className="pick-list">
+                    {q.answers.map(a => {
+                      const pickers = q.picks.filter(p => p.answer_id === a.id);
+                      if (pickers.length === 0) {
+                        return null;
+                      }
+                      return (
+                        <div key={a.id} className={`pick-group ${a.is_correct ? 'correct-group' : ''}`}>
+                          <span className="pick-answer">{a.text}:</span>
+                          <span className="pick-users">{pickers.map(p => p.user_name).join(', ')}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {!isLocked && totalQuestions > 0 && (
           <div className="submit-area">

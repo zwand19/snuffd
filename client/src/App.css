@@ -771,6 +771,79 @@ body {
   cursor: not-allowed;
 }
 
+.torch-info {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.torch-info summary {
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--bg-input);
+  transition: color 0.2s;
+  list-style: none;
+}
+
+.torch-info summary::-webkit-details-marker { display: none; }
+.torch-info summary::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.torch-info[open] summary::before { transform: rotate(90deg); }
+.torch-info summary:hover { color: var(--accent); }
+
+.torch-info-body {
+  padding: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  border-top: 1px solid var(--border-color);
+}
+
+.torch-info-body p { margin-bottom: 0.75rem; }
+
+.torch-info-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.torch-info-columns h5 {
+  color: var(--gold);
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+  margin-bottom: 0.3rem;
+}
+
+.torch-info-columns ul {
+  list-style: none;
+  padding: 0;
+}
+
+.torch-info-columns li {
+  padding: 0.15rem 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.torch-info-columns li strong { color: var(--accent); }
+
+.torch-info-note {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-style: italic;
+  margin-bottom: 0 !important;
+}
+
 .torch-contestant-cell { color: var(--text-secondary); }
 .torch-score-cell { color: var(--gold); font-weight: 700; }
 

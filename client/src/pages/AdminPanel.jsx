@@ -110,6 +110,8 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(q.text);
   const [points, setPoints] = useState(q.points);
+  const [editingAnswerId, setEditingAnswerId] = useState(null);
+  const [editAnswerPts, setEditAnswerPts] = useState('');
 
   async function saveQuestion() {
     await api.updateQuestion(q.id, { text, points });
@@ -124,6 +126,18 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
     }
     onAddAnswer(newAnswerText.trim());
     setNewAnswerText('');
+  }
+
+  function startEditPoints(a) {
+    setEditingAnswerId(a.id);
+    setEditAnswerPts(a.points_override != null ? String(a.points_override) : '');
+  }
+
+  async function saveAnswerPoints(aId) {
+    const val = editAnswerPts.trim() === '' ? null : parseInt(editAnswerPts);
+    await api.updateAnswer(aId, { points_override: val });
+    setEditingAnswerId(null);
+    onUpdate();
   }
 
   return (
@@ -156,8 +170,29 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
         {q.answers.map(a => (
           <div key={a.id} className={`answer-edit-item ${a.is_correct ? 'correct' : ''}`}>
             <span className="answer-text flex-1">{a.text}</span>
-            {a.points_override != null && (
-              <span className="answer-points">{a.points_override} pts</span>
+            {editingAnswerId === a.id ? (
+              <div className="inline-form" style={{ marginBottom: 0, gap: '0.3rem' }}>
+                <input
+                  type="number"
+                  value={editAnswerPts}
+                  onChange={e => setEditAnswerPts(e.target.value)}
+                  placeholder="pts"
+                  className="input input-sm"
+                  style={{ width: '60px' }}
+                  onKeyDown={e => e.key === 'Enter' && saveAnswerPoints(a.id)}
+                  autoFocus
+                />
+                <button onClick={() => saveAnswerPoints(a.id)} className="btn btn-xs btn-primary">Save</button>
+                <button onClick={() => setEditingAnswerId(null)} className="btn btn-xs">✕</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEditPoints(a)}
+                className="btn btn-xs"
+                title="Edit point value"
+              >
+                {a.points_override != null ? `${a.points_override} pts` : 'Set pts'}
+              </button>
             )}
             {!q.resolved && (
               <button

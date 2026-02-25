@@ -178,6 +178,47 @@ export default function Dashboard({ user }) {
           )}
         </div>
 
+        <details className="torch-info">
+          <summary>More Info</summary>
+          <div className="torch-info-body">
+            <p>Each player carries a torch for a contestant. That torch starts at <strong>35 points</strong>. You can swap your contestant before any week, but you'll lose points. If your contestant is eliminated, you lose extra points and must pick someone new.</p>
+            <p>At the end of the game, everyone will have a torch for a finalist — you'll score based on how they do in the finale, your remaining torch points, and how long you've held that torch.</p>
+            <div className="torch-info-columns">
+              <div>
+                <h5>Swaps</h5>
+                <ul>
+                  <li>Pre-merge: <strong>-2</strong></li>
+                  <li>Post-merge: <strong>-3</strong></li>
+                  <li>Pre-finale: <strong>-4</strong></li>
+                </ul>
+              </div>
+              <div>
+                <h5>Elimination Penalty</h5>
+                <ul>
+                  <li>Pre-merge: <strong>-4</strong></li>
+                  <li>Post-merge: <strong>-6</strong></li>
+                </ul>
+              </div>
+              <div>
+                <h5>Finale Scoring</h5>
+                <ul>
+                  <li>Winner: all points + up to <strong>6 bonus</strong> for consecutive weeks held</li>
+                  <li>Runner-up (FTC loss): <strong>half</strong> points</li>
+                  <li>Eliminated in finale: <strong>1/3</strong> points</li>
+                </ul>
+              </div>
+              <div>
+                <h5>Bonuses</h5>
+                <ul>
+                  <li>Idol played (prevents elim): <strong>+2</strong></li>
+                  <li>Individual immunity win: <strong>+1</strong></li>
+                </ul>
+              </div>
+            </div>
+            <p className="torch-info-note">If the Sole Survivor is someone you once held a torch for but switched off, you get a <strong>30% deduction</strong> on your final torch score. Half points are rounded down. "Post-merge" means after Earn the Merge if applicable.</p>
+          </div>
+        </details>
+
         {torchMessage && (
           <div className={`alert ${torchMessage.includes('!') ? 'alert-success' : 'alert-error'}`}>
             {torchMessage}
@@ -199,7 +240,7 @@ export default function Dashboard({ user }) {
         {showTorchPicker && (
           <div className="torch-picker">
             <h4>Pick a contestant to carry your torch</h4>
-            {!myTorch && <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Your torch starts at 20 points. Switching later costs 1 point.</p>}
+            {!myTorch && <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Your torch starts at 35 points. You can voluntarily switch for a penalty later, or be penalized & forced to re-pick if your torch is snuffed.</p>}
             <div className="torch-picker-grid">
               {contestants.filter(c => !c.eliminated).map(c => (
                 <button

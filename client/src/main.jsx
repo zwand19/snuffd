@@ -16,7 +16,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         domain={domain}
         clientId={clientId}
         authorizationParams={{
-          redirect_uri: 'https://zwand19.github.io/snuffd',
+          redirect_uri: window.location.origin + (window.location.pathname.includes('/snuffd') ? '/snuffd' : ''),
           audience,
         }}
       >

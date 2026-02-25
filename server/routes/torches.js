@@ -109,7 +109,7 @@ router.post('/pick', requireAuth, async (req, res) => {
       pointsAfter = 20;
       action = 'initial';
       await client.query(
-        'INSERT INTO torches (user_id, contestant_id, points) VALUES ($1, $2, 20)',
+        'INSERT INTO torches (user_id, contestant_id, points) VALUES ($1, $2, 35)',
         [req.user.id, contestant_id]
       );
     } else if (existing.contestant_id === contestant_id) {

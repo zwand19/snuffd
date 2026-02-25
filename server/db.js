@@ -68,7 +68,7 @@ async function initDb() {
       id SERIAL PRIMARY KEY,
       user_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
       contestant_id INTEGER REFERENCES contestants(id),
-      points INTEGER DEFAULT 20,
+      points INTEGER DEFAULT 35,
       needs_switch INTEGER DEFAULT 0
     );
 
