@@ -105,6 +105,53 @@ router.post('/:id/answers', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/:id/clone', requireAdmin, async (req, res) => {
+  const qId = req.params.id;
+  try {
+    const { rows: [orig] } = await query('SELECT * FROM questions WHERE id = $1', [qId]);
+    if (!orig) {
+      return res.status(404).json({ error: 'Question not found' });
+    }
+
+    let newText = orig.text;
+    const match = newText.match(/#(\d+)$/);
+    if (match) {
+      newText = newText.replace(/#(\d+)$/, `#${parseInt(match[1]) + 1}`);
+    }
+
+    const { rows: [maxRow] } = await query(
+      'SELECT MAX(sort_order) as m FROM questions WHERE week_id = $1',
+      [orig.week_id]
+    );
+    const nextOrder = (parseInt(maxRow?.m) || 0) + 1;
+
+    const { rows: [cloned] } = await query(
+      'INSERT INTO questions (week_id, text, points, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
+      [orig.week_id, newText, orig.points, nextOrder]
+    );
+
+    const { rows: answers } = await query(
+      'SELECT * FROM answers WHERE question_id = $1 ORDER BY sort_order ASC, id ASC',
+      [qId]
+    );
+    for (const a of answers) {
+      await query(
+        'INSERT INTO answers (question_id, text, points_override, sort_order) VALUES ($1, $2, $3, $4)',
+        [cloned.id, a.text, a.points_override, a.sort_order]
+      );
+    }
+
+    const { rows: clonedAnswers } = await query(
+      'SELECT * FROM answers WHERE question_id = $1 ORDER BY sort_order ASC, id ASC',
+      [cloned.id]
+    );
+    res.json({ ...cloned, answers: clonedAnswers });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.post('/:id/add-contestants', requireAdmin, async (req, res) => {
   const qId = req.params.id;
   try {

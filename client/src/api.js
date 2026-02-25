@@ -44,6 +44,7 @@ export const api = {
   addAnswer: (qId, data) => request(`/api/questions/${qId}/answers`, { method: 'POST', body: JSON.stringify(data) }),
   updateAnswer: (id, data) => request(`/api/questions/answers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAnswer: (id) => request(`/api/questions/answers/${id}`, { method: 'DELETE' }),
+  cloneQuestion: (qId) => request(`/api/questions/${qId}/clone`, { method: 'POST' }),
   addContestantAnswers: (qId) => request(`/api/questions/${qId}/add-contestants`, { method: 'POST' }),
   resolveQuestion: (qId, answerId) => request(`/api/questions/${qId}/resolve`, { method: 'POST', body: JSON.stringify({ answer_id: answerId }) }),
   unresolveQuestion: (qId) => request(`/api/questions/${qId}/unresolve`, { method: 'POST' }),

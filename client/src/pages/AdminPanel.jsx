@@ -105,7 +105,7 @@ function UsersTab({ users, onRefresh }) {
   );
 }
 
-function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onRemoveAnswer, onResolve, onUnresolve, onDelete, onUpdate }) {
+function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onRemoveAnswer, onResolve, onUnresolve, onDelete, onClone, onUpdate }) {
   const [newAnswerText, setNewAnswerText] = useState('');
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(q.text);
@@ -161,6 +161,7 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
             <span className="question-text flex-1">{q.text}</span>
             <span className="question-points">{q.points} pts</span>
             <button onClick={() => setEditing(true)} className="btn btn-sm">Edit</button>
+            <button onClick={onClone} className="btn btn-sm btn-secondary">Clone</button>
             <button onClick={onDelete} className="btn btn-sm btn-danger">Delete</button>
           </>
         )}
@@ -278,6 +279,11 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
     loadWeek();
   }
 
+  async function cloneQuestion(qId) {
+    await api.cloneQuestion(qId);
+    loadWeek();
+  }
+
   async function addContestantAnswers(qId) {
     await api.addContestantAnswers(qId);
     loadWeek();
@@ -357,6 +363,7 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
           onResolve={(aId) => resolve(q.id, aId)}
           onUnresolve={() => unresolve(q.id)}
           onDelete={() => deleteQuestion(q.id)}
+          onClone={() => cloneQuestion(q.id)}
           onUpdate={loadWeek}
         />
       ))}
