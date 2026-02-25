@@ -4,7 +4,7 @@ export function setGetToken(fn) {
   getTokenFn = fn;
 }
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL = 'https://snuffd.onrender.com';
 
 async function request(path, options = {}) {
   const token = getTokenFn ? await getTokenFn() : null;
