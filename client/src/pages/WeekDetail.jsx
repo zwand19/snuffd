@@ -175,22 +175,23 @@ export default function WeekDetail({ user, setAppError }) {
 
               {isCollapsed ? (
                 <div className="answers-list">
-                  {pickedAnswers.map(pa => (
-                    <div key={pa.id} className="answer-option selected">
-                      <span className="answer-text">{pa.text}</span>
+                  {pickedAnswers.map((pa, pi) => (
+                    <div key={pa.id} className="answer-option selected" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span className="answer-text" style={{ flex: 1 }}>{pa.text}</span>
                       {pa.points_override != null && (
                         <span className="answer-points">{pa.points_override} pts</span>
                       )}
+                      {pi === pickedAnswers.length - 1 && (
+                        <button
+                          type="button"
+                          className="btn btn-xs"
+                          onClick={() => setExpandedQuestions({ ...expandedQuestions, [q.id]: true })}
+                        >
+                          Edit
+                        </button>
+                      )}
                     </div>
                   ))}
-                  <button
-                    type="button"
-                    className="btn btn-xs"
-                    onClick={() => setExpandedQuestions({ ...expandedQuestions, [q.id]: true })}
-                    style={{ marginTop: '0.25rem' }}
-                  >
-                    Edit
-                  </button>
                 </div>
               ) : (
                 <div className="answers-list">
