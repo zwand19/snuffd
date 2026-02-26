@@ -118,9 +118,14 @@ export default function Dashboard({ user, setAppError }) {
               <div className="submitted">
                 <h4>✅ Submitted ({submissionStatus.users.filter(u => u.submitted).length})</h4>
                 <div className="user-chips">
-                  {submissionStatus.users.filter(u => u.submitted).map(u => (
-                    <span key={u.id} className="chip chip-success">{u.name}</span>
-                  ))}
+                  {submissionStatus.users.filter(u => u.submitted).map(u => {
+                    const hasTorch = torchRankings.some(t => t.user_id === u.id);
+                    return (
+                      <span key={u.id} className={`chip ${hasTorch ? 'chip-success' : 'chip-no-torch'}`}>
+                        {u.name}{!hasTorch ? ' 🚫🔦' : ''}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
               <div className="not-submitted">

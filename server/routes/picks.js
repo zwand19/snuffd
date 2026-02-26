@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { pool, query } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const router = Router();
 
@@ -189,6 +189,57 @@ router.get('/status/:weekId', requireAuth, async (req, res) => {
     });
 
     res.json({ users: status, questionCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/random/:weekId', requireAdmin, async (req, res) => {
+  const { user_ids } = req.body;
+  const weekId = req.params.weekId;
+  if (!Array.isArray(user_ids) || user_ids.length === 0) {
+    return res.status(400).json({ error: 'user_ids array is required' });
+  }
+
+  try {
+    const { rows: questions } = await query(
+      'SELECT id, required_answers FROM questions WHERE week_id = $1',
+      [weekId]
+    );
+    if (questions.length === 0) {
+      return res.status(400).json({ error: 'No questions for this week' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const userId of user_ids) {
+        for (const q of questions) {
+          const { rows: answers } = await client.query(
+            'SELECT id FROM answers WHERE question_id = $1 ORDER BY RANDOM() LIMIT $2',
+            [q.id, q.required_answers || 1]
+          );
+          await client.query(
+            'DELETE FROM picks WHERE user_id = $1 AND question_id = $2',
+            [userId, q.id]
+          );
+          for (const a of answers) {
+            await client.query(
+              'INSERT INTO picks (user_id, question_id, answer_id) VALUES ($1, $2, $3)',
+              [userId, q.id, a.id]
+            );
+          }
+        }
+      }
+      await client.query('COMMIT');
+      res.json({ success: true, count: user_ids.length });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

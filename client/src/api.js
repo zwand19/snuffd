@@ -88,6 +88,7 @@ export const api = {
   submitPicks: (picks) => request('/api/picks', { method: 'POST', body: JSON.stringify({ picks }) }),
   getRankings: () => request('/api/picks/rankings'),
   getSubmissionStatus: (weekId) => request(`/api/picks/status/${weekId}`),
+  assignRandomPicks: (weekId, userIds) => request(`/api/picks/random/${weekId}`, { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
 
   getGamePhase: () => request('/api/settings/game_phase'),
   setGamePhase: (game_phase) => request('/api/settings/game_phase', { method: 'PUT', body: JSON.stringify({ game_phase }) }),
@@ -96,6 +97,7 @@ export const api = {
   getTorchHistory: () => request('/api/torches/history'),
   getTorchWeek: (weekId) => request(`/api/torches/week/${weekId}`),
   pickTorch: (contestant_id) => request('/api/torches/pick', { method: 'POST', body: JSON.stringify({ contestant_id }) }),
+  assignRandomTorches: (userIds) => request('/api/torches/random', { method: 'POST', body: JSON.stringify({ user_ids: userIds }) }),
   getTorchRankings: () => request('/api/torches/rankings'),
   awardTorchBonus: (contestant_id, bonus_type) => request('/api/torches/award', { method: 'POST', body: JSON.stringify({ contestant_id, bonus_type }) }),
   resolveTorch: (contestant_id, result) => request('/api/torches/resolve', { method: 'POST', body: JSON.stringify({ contestant_id, result }) }),

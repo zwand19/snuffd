@@ -293,6 +293,12 @@ body {
   border: 1px solid rgba(243, 156, 18, 0.3);
 }
 
+.chip-no-torch {
+  background: rgba(192, 57, 43, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(192, 57, 43, 0.3);
+}
+
 /* ===== Rankings Table ===== */
 .table-wrap { overflow-x: auto; }
 

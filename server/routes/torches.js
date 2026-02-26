@@ -320,6 +320,57 @@ router.post('/award', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/random', requireAdmin, async (req, res) => {
+  const { user_ids } = req.body;
+  if (!Array.isArray(user_ids) || user_ids.length === 0) {
+    return res.status(400).json({ error: 'user_ids array is required' });
+  }
+
+  try {
+    const { rows: contestants } = await query(
+      'SELECT id, name FROM contestants WHERE eliminated = 0'
+    );
+    if (contestants.length === 0) {
+      return res.status(400).json({ error: 'No active contestants' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const assigned = [];
+      for (const userId of user_ids) {
+        const { rows: [existing] } = await client.query(
+          'SELECT id FROM torches WHERE user_id = $1', [userId]
+        );
+        if (existing) {
+          continue;
+        }
+        const contestant = contestants[Math.floor(Math.random() * contestants.length)];
+        await client.query(
+          'INSERT INTO torches (user_id, contestant_id, points) VALUES ($1, $2, 35)',
+          [userId, contestant.id]
+        );
+        await client.query(
+          `INSERT INTO torch_history (user_id, contestant_id, action, points_before, points_after)
+           VALUES ($1, $2, 'initial', 35, 35)`,
+          [userId, contestant.id]
+        );
+        assigned.push({ user_id: userId, contestant_name: contestant.name });
+      }
+      await client.query('COMMIT');
+      res.json({ success: true, assigned });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.post('/unresolve', requireAdmin, async (req, res) => {
   const { contestant_id } = req.body;
   if (!contestant_id) {

@@ -61,9 +61,10 @@ function ContestantsTab({ contestants, onRefresh }) {
   );
 }
 
-function UsersTab({ users, onRefresh }) {
+function UsersTab({ users, torchRankings, onRefresh }) {
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState('');
+  const [torchMsg, setTorchMsg] = useState('');
 
   function startEdit(u) {
     setEditing(u.id);
@@ -76,7 +77,51 @@ function UsersTab({ users, onRefresh }) {
     onRefresh();
   }
 
+  const noTorchUsers = users.filter(u => !torchRankings.some(t => t.user_id === u.id));
+
+  async function assignRandomTorches(userIds) {
+    setTorchMsg('');
+    try {
+      const result = await api.assignRandomTorches(userIds);
+      const names = result.assigned.map(a => a.contestant_name).join(', ');
+      setTorchMsg(`Assigned ${result.assigned.length} torch(es): ${names}!`);
+      onRefresh();
+    } catch (err) {
+      setTorchMsg(err.message);
+    }
+  }
+
   return (
+    <div>
+      {noTorchUsers.length > 0 && (
+        <div className="card" style={{ borderLeft: '3px solid var(--warning)', marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <h2>🚫🔦 No Torch ({noTorchUsers.length})</h2>
+            <button
+              className="btn btn-sm btn-warning"
+              onClick={() => assignRandomTorches(noTorchUsers.map(u => u.id))}
+            >
+              Assign Random to All
+            </button>
+          </div>
+          {torchMsg && (
+            <div className={`alert ${torchMsg.includes('!') ? 'alert-success' : 'alert-error'}`}>
+              {torchMsg}
+            </div>
+          )}
+          <div className="user-chips">
+            {noTorchUsers.map(u => (
+              <span key={u.id} className="chip chip-warning" style={{ cursor: 'pointer' }} onClick={() => assignRandomTorches([u.id])}>
+                {u.name}
+              </span>
+            ))}
+          </div>
+          <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+            Click a name to assign individually.
+          </p>
+        </div>
+      )}
+
     <div className="users-list">
       {users.map(u => (
         <div key={u.id} className="user-item">
@@ -101,6 +146,7 @@ function UsersTab({ users, onRefresh }) {
           {u.is_admin ? <span className="badge badge-admin">Admin</span> : null}
         </div>
       ))}
+    </div>
     </div>
   );
 }
@@ -273,8 +319,10 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
   const [newQText, setNewQText] = useState('');
   const [newQPoints, setNewQPoints] = useState(1);
   const [newQRequired, setNewQRequired] = useState(1);
+  const [submissionStatus, setSubmissionStatus] = useState(null);
+  const [randomMsg, setRandomMsg] = useState('');
 
-  useEffect(() => { loadWeek(); }, [weekId]);
+  useEffect(() => { loadWeek(); loadStatus(); }, [weekId]);
 
   async function loadWeek() {
     const data = await api.getWeek(weekId);
@@ -284,6 +332,26 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
       const d = new Date(data.lock_time);
       const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
       setLockTime(local.toISOString().slice(0, 16));
+    }
+  }
+
+  async function loadStatus() {
+    try {
+      const data = await api.getSubmissionStatus(weekId);
+      setSubmissionStatus(data);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  async function assignRandomPicks(userIds) {
+    setRandomMsg('');
+    try {
+      const result = await api.assignRandomPicks(weekId, userIds);
+      setRandomMsg(`Assigned random picks to ${result.count} user(s)!`);
+      loadStatus();
+    } catch (err) {
+      setRandomMsg(err.message);
     }
   }
 
@@ -370,6 +438,38 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
         </div>
         <button onClick={saveDetails} className="btn btn-primary">Save Details</button>
       </div>
+
+      {submissionStatus && (() => {
+        const missing = submissionStatus.users.filter(u => !u.submitted);
+        return missing.length > 0 ? (
+          <div className="card" style={{ borderLeft: '3px solid var(--warning)' }}>
+            <div className="card-header">
+              <h2>⏳ Missing Picks ({missing.length})</h2>
+              <button
+                className="btn btn-sm btn-warning"
+                onClick={() => assignRandomPicks(missing.map(u => u.id))}
+              >
+                Assign Random to All
+              </button>
+            </div>
+            {randomMsg && (
+              <div className={`alert ${randomMsg.includes('!') ? 'alert-success' : 'alert-error'}`}>
+                {randomMsg}
+              </div>
+            )}
+            <div className="user-chips">
+              {missing.map(u => (
+                <span key={u.id} className="chip chip-warning" style={{ cursor: 'pointer' }} onClick={() => assignRandomPicks([u.id])}>
+                  {u.name}
+                </span>
+              ))}
+            </div>
+            <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+              Click a name to assign random picks individually.
+            </p>
+          </div>
+        ) : null;
+      })()}
 
       <h3>Questions</h3>
       <form onSubmit={addQuestion} className="inline-form">
@@ -601,6 +701,7 @@ export default function AdminPanel({ setAppError }) {
   const [contestants, setContestants] = useState([]);
   const [weeks, setWeeks] = useState([]);
   const [users, setUsers] = useState([]);
+  const [torchRankings, setTorchRankings] = useState([]);
   const [editingWeekId, setEditingWeekId] = useState(null);
   const [newWeekNum, setNewWeekNum] = useState('');
 
@@ -608,14 +709,16 @@ export default function AdminPanel({ setAppError }) {
 
   async function loadAll() {
     try {
-      const [c, w, u] = await Promise.all([
+      const [c, w, u, tr] = await Promise.all([
         api.getContestants(),
         api.getWeeks(),
         api.getUsers(),
+        api.getTorchRankings(),
       ]);
       setContestants(c);
       setWeeks(w);
       setUsers(u);
+      setTorchRankings(tr);
     } catch (err) {
       console.error('Failed to load admin data:', err);
       if (setAppError) {
@@ -666,7 +769,7 @@ export default function AdminPanel({ setAppError }) {
       )}
 
       {tab === 'users' && (
-        <UsersTab users={users} onRefresh={loadAll} />
+        <UsersTab users={users} torchRankings={torchRankings} onRefresh={loadAll} />
       )}
 
       {tab === 'weeks' && !editingWeekId && (
