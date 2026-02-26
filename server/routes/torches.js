@@ -125,7 +125,7 @@ router.post('/pick', requireAuth, async (req, res) => {
       );
     } else {
       const { rows: [lockedWeek] } = await client.query(
-        "SELECT 1 FROM weeks WHERE lock_time <= NOW() LIMIT 1"
+        "SELECT 1 FROM weeks WHERE lock_time::timestamptz <= NOW() LIMIT 1"
       );
       pointsBefore = existing.points;
       if (!lockedWeek) {
@@ -190,7 +190,7 @@ router.get('/rankings', requireAuth, async (req, res) => {
     let allHistory = [];
     if (winnerContestant) {
       const { rows: wks } = await query(
-        "SELECT id, week_number, lock_time FROM weeks WHERE lock_time <= NOW() ORDER BY week_number DESC"
+        "SELECT id, week_number, lock_time FROM weeks WHERE lock_time::timestamptz <= NOW() ORDER BY week_number DESC"
       );
       lockedWeeks = wks;
       const { rows: hist } = await query(
