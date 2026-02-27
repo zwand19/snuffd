@@ -301,7 +301,7 @@ export default function Dashboard({ user, setAppError }) {
       {lockedWeeks.length > 0 && (
         <div className="card">
           <div className="card-header">
-            <h2>📅 Past Weeks</h2>
+            <h2>📅 Past Polls</h2>
           </div>
           <div className="week-grid">
             {lockedWeeks.map(w => (
