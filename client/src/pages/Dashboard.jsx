@@ -203,8 +203,8 @@ export default function Dashboard({ user, setAppError }) {
               <div>
                 <h5>Elimination Penalty</h5>
                 <ul>
-                  <li>Pre-merge: <strong>-4</strong></li>
-                  <li>Post-merge / pre-finale: <strong>-6</strong></li>
+                  <li>Pre-merge: <strong>-5</strong></li>
+                  <li>Post-merge / pre-finale: <strong>-7</strong></li>
                 </ul>
               </div>
               <div>

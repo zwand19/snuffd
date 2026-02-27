@@ -59,7 +59,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
         "SELECT value FROM game_settings WHERE key = 'game_phase'"
       );
       const phase = phaseSetting?.value || 'pre_merge';
-      const elimPenalty = (phase === 'post_merge' || phase === 'pre_finale') ? 6 : 4;
+      const elimPenalty = (phase === 'post_merge' || phase === 'pre_finale') ? 7 : 5;
 
       const { rows: affected } = await client.query(
         'SELECT * FROM torches WHERE contestant_id = $1',
