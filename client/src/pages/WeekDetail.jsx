@@ -12,6 +12,7 @@ export default function WeekDetail({ user, setAppError }) {
   const [message, setMessage] = useState('');
   const [torchAssignments, setTorchAssignments] = useState([]);
   const [expandedQuestions, setExpandedQuestions] = useState({});
+  const [viewingUser, setViewingUser] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -143,6 +144,78 @@ export default function WeekDetail({ user, setAppError }) {
         </div>
       )}
 
+      {(isLocked || user?.is_admin) && week.questions.length > 0 && (() => {
+        const allPicks = week.questions.flatMap(q => q.picks || []);
+        const userMap = {};
+        for (const p of allPicks) {
+          if (!userMap[p.user_id]) {
+            userMap[p.user_id] = p.user_name;
+          }
+        }
+        const pickUsers = Object.entries(userMap)
+          .map(([id, name]) => ({ id: parseInt(id), name }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        if (pickUsers.length === 0) {
+          return null;
+        }
+
+        return (
+          <div className="card">
+            <div className="card-header">
+              <h2>👀 View Player Picks</h2>
+              {viewingUser && (
+                <button onClick={() => setViewingUser(null)} className="btn btn-sm btn-ghost">Clear</button>
+              )}
+            </div>
+            <div className="user-chips" style={{ padding: '0 1rem 0.75rem' }}>
+              {pickUsers.map(u => (
+                <span
+                  key={u.id}
+                  className={`chip ${viewingUser === u.id ? 'chip-active' : 'chip-success'}`}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setViewingUser(viewingUser === u.id ? null : u.id)}
+                >
+                  {u.name}
+                </span>
+              ))}
+            </div>
+            {viewingUser && (() => {
+              const vu = pickUsers.find(u => u.id === viewingUser);
+              return (
+                <div className="user-picks-detail" style={{ padding: '0 1rem 1rem' }}>
+                  <h3 style={{ margin: '0 0 0.75rem', fontSize: '1rem' }}>{vu?.name}'s Picks</h3>
+                  {week.questions.map((q, qi) => {
+                    const userPicks = (q.picks || []).filter(p => p.user_id === viewingUser);
+                    const pickedAnswers = userPicks.map(p => q.answers.find(a => a.id === p.answer_id)).filter(Boolean);
+                    return (
+                      <div key={q.id} className="user-pick-row" style={{
+                        display: 'flex', gap: '0.75rem', alignItems: 'baseline',
+                        padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
+                      }}>
+                        <span className="question-number" style={{ flexShrink: 0 }}>Q{qi + 1}</span>
+                        <span style={{ flex: 1, color: 'var(--text-muted)', fontSize: '0.9rem' }}>{q.text}</span>
+                        <span style={{ flexShrink: 0, fontWeight: 600 }}>
+                          {pickedAnswers.length > 0
+                            ? pickedAnswers.map((a, i) => (
+                                <span key={a.id} className={a.is_correct && q.resolved ? 'correct-marker' : (q.resolved ? 'incorrect-text' : '')}>
+                                  {i > 0 ? ', ' : ''}{a.text}
+                                  {a.is_correct && q.resolved ? ' ✓' : ''}
+                                </span>
+                              ))
+                            : <span className="text-muted">—</span>
+                          }
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
+
       <form onSubmit={handleSubmit}>
         {week.questions.map((q, qi) => {
           const isMulti = q.required_answers > 1;
@@ -200,6 +273,7 @@ export default function WeekDetail({ user, setAppError }) {
                       ? currentPicks.includes(a.id)
                       : picks[q.id] === a.id;
                     const isCorrect = a.is_correct;
+                    const isEliminated = a.is_eliminated;
                     const wasMyPick = q.my_picks?.some(p => p.answer_id === a.id);
 
                     return (
@@ -210,6 +284,7 @@ export default function WeekDetail({ user, setAppError }) {
                           isSelected ? 'selected' : '',
                           isLocked && isCorrect ? 'correct' : '',
                           isLocked && wasMyPick && !isCorrect && q.resolved ? 'incorrect' : '',
+                          isEliminated ? 'eliminated' : '',
                         ].join(' ')}
                       >
                         {!isLocked && isMulti && (
@@ -241,11 +316,12 @@ export default function WeekDetail({ user, setAppError }) {
                             }}
                           />
                         )}
-                        <span className="answer-text">{a.text}</span>
+                        <span className={`answer-text ${isEliminated ? 'text-strikethrough text-muted' : ''}`}>{a.text}</span>
                         {a.points_override != null && (
                           <span className="answer-points">{a.points_override} pts</span>
                         )}
                         {isLocked && isCorrect && <span className="correct-marker">✓</span>}
+                        {isEliminated && <span className="eliminated-marker">✗</span>}
                         {isLocked && wasMyPick && <span className="my-pick-marker">Your pick</span>}
                       </label>
                     );

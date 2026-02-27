@@ -27,6 +27,20 @@ router.put('/answers/:id', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/answers/:id/eliminate', requireAdmin, async (req, res) => {
+  const { eliminated } = req.body;
+  try {
+    const { rows } = await query(
+      'UPDATE answers SET is_eliminated = $1 WHERE id = $2 RETURNING *',
+      [eliminated ? 1 : 0, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.delete('/answers/:id', requireAdmin, async (req, res) => {
   try {
     await query('DELETE FROM answers WHERE id = $1', [req.params.id]);

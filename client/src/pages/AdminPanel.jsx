@@ -61,10 +61,126 @@ function ContestantsTab({ contestants, onRefresh }) {
   );
 }
 
+function EmailComposer({ onClose }) {
+  const [subject, setSubject] = useState('');
+  const [markdown, setMarkdown] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
+
+  async function send() {
+    if (!subject.trim() || !markdown.trim()) {
+      return;
+    }
+    if (!confirm(`Send this email to ALL users?`)) {
+      return;
+    }
+    setSending(true);
+    setResult(null);
+    try {
+      const res = await api.emailUsers({ subject: subject.trim(), markdown: markdown.trim() });
+      setResult(res);
+    } catch (err) {
+      setResult({ error: err.message });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ borderLeft: '3px solid var(--primary)', marginBottom: '1.5rem' }}>
+      <div className="card-header">
+        <h2>📧 Compose Email</h2>
+        <button onClick={onClose} className="btn btn-sm btn-ghost">✕</button>
+      </div>
+
+      {result && (
+        <div className={`alert ${result.error ? 'alert-error' : 'alert-success'}`}>
+          {result.error || `Sent to ${result.sent}/${result.total} users${result.failed ? ` (${result.failed} failed)` : ''}!`}
+        </div>
+      )}
+
+      <div style={{ padding: '0 1rem 1rem' }}>
+        <div className="form-row">
+          <label>Subject</label>
+          <input
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            placeholder="Email subject line"
+            className="input"
+          />
+        </div>
+        <div className="form-row">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label>Body (Markdown)</label>
+            <button
+              onClick={() => setPreviewing(!previewing)}
+              className="btn btn-xs"
+            >
+              {previewing ? 'Edit' : 'Preview'}
+            </button>
+          </div>
+          {previewing ? (
+            <div
+              className="email-preview"
+              style={{
+                background: 'rgba(0,0,0,0.2)',
+                borderRadius: '8px',
+                padding: '16px',
+                minHeight: '150px',
+                color: 'var(--text)',
+                lineHeight: 1.7,
+              }}
+              dangerouslySetInnerHTML={{ __html: simpleMarkdown(markdown) }}
+            />
+          ) : (
+            <textarea
+              value={markdown}
+              onChange={e => setMarkdown(e.target.value)}
+              placeholder={"Hey {{name}},\n\nThis week's picks are live! Head over and make your selections before lock time.\n\n**Don't forget** to check the torch standings too.\n\n— Snuffd Admin"}
+              className="input"
+              rows={8}
+              style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: '0.9rem' }}
+            />
+          )}
+          <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+            Use <code>{'{{name}}'}</code> to insert each user's name. Supports **bold**, *italic*, lists, links, etc.
+          </p>
+        </div>
+        <button
+          onClick={send}
+          disabled={sending || !subject.trim() || !markdown.trim()}
+          className="btn btn-primary"
+        >
+          {sending ? 'Sending...' : 'Send to All Users'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function simpleMarkdown(md) {
+  let html = md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2">$1</a>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+  html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+  html = html.replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+  return html;
+}
+
 function UsersTab({ users, torchRankings, onRefresh }) {
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState('');
   const [torchMsg, setTorchMsg] = useState('');
+  const [showEmail, setShowEmail] = useState(false);
 
   function startEdit(u) {
     setEditing(u.id);
@@ -75,6 +191,18 @@ function UsersTab({ users, torchRankings, onRefresh }) {
     await api.updateUser(id, { name: editName });
     setEditing(null);
     onRefresh();
+  }
+
+  async function deleteUser(u) {
+    if (!confirm(`Delete ${u.name} (${u.email})? This removes all their picks, torches, and history.`)) {
+      return;
+    }
+    try {
+      await api.deleteUser(u.id);
+      onRefresh();
+    } catch (err) {
+      alert(err.message);
+    }
   }
 
   const noTorchUsers = users.filter(u => !torchRankings.some(t => t.user_id === u.id));
@@ -93,6 +221,17 @@ function UsersTab({ users, torchRankings, onRefresh }) {
 
   return (
     <div>
+      <div style={{ marginBottom: '1rem' }}>
+        <button
+          onClick={() => setShowEmail(!showEmail)}
+          className={`btn ${showEmail ? 'btn-ghost' : 'btn-primary'}`}
+        >
+          {showEmail ? 'Hide Email Composer' : '📧 Email All Users'}
+        </button>
+      </div>
+
+      {showEmail && <EmailComposer onClose={() => setShowEmail(false)} />}
+
       {noTorchUsers.length > 0 && (
         <div className="card" style={{ borderLeft: '3px solid var(--warning)', marginBottom: '1.5rem' }}>
           <div className="card-header">
@@ -141,6 +280,9 @@ function UsersTab({ users, torchRankings, onRefresh }) {
             <div className="user-name-row">
               <span>{u.name}</span>
               <button onClick={() => startEdit(u)} className="btn btn-sm">Edit</button>
+              {!u.is_admin && (
+                <button onClick={() => deleteUser(u)} className="btn btn-sm btn-danger">Delete</button>
+              )}
             </div>
           )}
           {u.is_admin ? <span className="badge badge-admin">Admin</span> : null}
@@ -191,6 +333,11 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
     onUpdate();
   }
 
+  async function toggleEliminated(a) {
+    await api.eliminateAnswer(a.id, !a.is_eliminated);
+    onUpdate();
+  }
+
   return (
     <div className={`card question-edit-card ${q.resolved ? 'resolved' : ''}`}>
       <div className="question-edit-header">
@@ -228,11 +375,12 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
 
       <div className="answers-editor">
         {q.answers.map(a => (
-          <div key={a.id} className={`answer-edit-item ${a.is_correct ? 'correct' : ''}`}>
-            {isMulti && !q.resolved && (
+          <div key={a.id} className={`answer-edit-item ${a.is_correct ? 'correct' : ''} ${a.is_eliminated ? 'eliminated' : ''}`}>
+            {!q.resolved && (
               <input
                 type="checkbox"
                 checked={correctIds.includes(a.id)}
+                disabled={a.is_eliminated}
                 onChange={() => {
                   setCorrectIds(prev =>
                     prev.includes(a.id) ? prev.filter(id => id !== a.id) : [...prev, a.id]
@@ -241,7 +389,7 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
                 title="Toggle correct"
               />
             )}
-            <span className="answer-text flex-1">{a.text}</span>
+            <span className={`answer-text flex-1 ${a.is_eliminated ? 'text-strikethrough' : ''}`}>{a.text}</span>
             {editingAnswerId === a.id ? (
               <div className="inline-form" style={{ marginBottom: 0, gap: '0.3rem' }}>
                 <input
@@ -266,14 +414,17 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
                 {a.points_override != null ? `${a.points_override} pts` : 'Set pts'}
               </button>
             )}
-            {!isMulti && !q.resolved && (
+            {!q.resolved && (
               <button
-                onClick={() => onResolve(a.id)}
-                className="btn btn-xs btn-success"
-                title="Mark correct"
-              >✓</button>
+                onClick={() => toggleEliminated(a)}
+                className={`btn btn-xs ${a.is_eliminated ? 'btn-warning' : 'btn-danger'}`}
+                title={a.is_eliminated ? 'Reinstate answer' : 'Mark incorrect'}
+              >
+                {a.is_eliminated ? '↩' : '✗'}
+              </button>
             )}
             {a.is_correct && <span className="badge badge-correct">Correct</span>}
+            {a.is_eliminated && !q.resolved && <span className="badge badge-eliminated">Eliminated</span>}
             <button onClick={() => onRemoveAnswer(a.id)} className="btn btn-xs btn-ghost">✕</button>
           </div>
         ))}
@@ -295,7 +446,7 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
           <button type="submit" className="btn btn-sm">Add</button>
         </form>
         <button onClick={onAddContestants} className="btn btn-sm btn-secondary">+ All Contestants</button>
-        {isMulti && !q.resolved && (
+        {!q.resolved && (
           <button
             onClick={() => onResolve(correctIds)}
             className="btn btn-sm btn-success"

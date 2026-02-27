@@ -90,7 +90,7 @@ router.get('/rankings', requireAuth, async (req, res) => {
       [now]
     );
     const { rows: allAnswers } = await query(
-      'SELECT id, question_id, points_override, is_correct FROM answers'
+      'SELECT id, question_id, points_override, is_correct, is_eliminated FROM answers'
     );
     const { rows: allPicks } = await query(
       'SELECT user_id, question_id, answer_id FROM picks'
@@ -138,8 +138,10 @@ router.get('/rankings', requireAuth, async (req, res) => {
           }
         } else {
           const pickedAnswer = answerMap[pick.answer_id];
-          const possiblePoints = pickedAnswer?.points_override ?? q.points;
-          potentialScore += possiblePoints;
+          if (!pickedAnswer?.is_eliminated) {
+            const possiblePoints = pickedAnswer?.points_override ?? q.points;
+            potentialScore += possiblePoints;
+          }
         }
       }
 

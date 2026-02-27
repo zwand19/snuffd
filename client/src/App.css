@@ -299,6 +299,14 @@ body {
   border: 1px solid rgba(192, 57, 43, 0.3);
 }
 
+.chip-active {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+}
+
+.incorrect-text { color: var(--danger); opacity: 0.7; }
+
 /* ===== Rankings Table ===== */
 .table-wrap { overflow-x: auto; }
 
@@ -388,6 +396,7 @@ body {
 .badge-resolved { background: rgba(39, 174, 96, 0.2); color: var(--success); }
 .badge-admin { background: rgba(232, 127, 0, 0.2); color: var(--accent); }
 .badge-correct { background: rgba(39, 174, 96, 0.2); color: var(--success); }
+.badge-eliminated { background: rgba(231, 76, 60, 0.2); color: var(--danger); }
 
 /* ===== Alerts ===== */
 .alert {
@@ -477,6 +486,8 @@ body {
 .answer-option.selected { border-color: var(--accent); background: rgba(232, 127, 0, 0.1); }
 .answer-option.correct { border-color: var(--correct); background: rgba(46, 204, 113, 0.1); }
 .answer-option.incorrect { border-color: var(--incorrect); background: rgba(231, 76, 60, 0.08); }
+.answer-option.eliminated { opacity: 0.5; }
+.answer-option.eliminated.selected { border-color: var(--danger); background: rgba(231, 76, 60, 0.08); }
 
 .answer-option input[type="radio"] {
   accent-color: var(--accent);
@@ -488,6 +499,7 @@ body {
 .answer-text { flex: 1; min-width: 0; }
 .answer-points { color: var(--gold); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
 .correct-marker { color: var(--correct); font-weight: 700; }
+.eliminated-marker { color: var(--danger); font-weight: 700; }
 .my-pick-marker { color: var(--accent); font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
 
 /* ===== Pick Summary ===== */
@@ -719,6 +731,12 @@ body {
   background: rgba(46, 204, 113, 0.1);
   border: 1px solid rgba(46, 204, 113, 0.3);
 }
+
+.answer-edit-item.eliminated {
+  opacity: 0.5;
+}
+
+.text-strikethrough { text-decoration: line-through; }
 
 .question-actions {
   display: flex;

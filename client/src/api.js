@@ -62,6 +62,8 @@ export const api = {
   getMe: () => request('/api/users/me'),
   getUsers: () => request('/api/users'),
   updateUser: (id, data) => request(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteUser: (id) => request(`/api/users/${id}`, { method: 'DELETE' }),
+  emailUsers: (data) => request('/api/users/email', { method: 'POST', body: JSON.stringify(data) }),
 
   getWeeks: () => request('/api/weeks'),
   getWeek: (id) => request(`/api/weeks/${id}`),
@@ -80,6 +82,7 @@ export const api = {
   addAnswer: (qId, data) => request(`/api/questions/${qId}/answers`, { method: 'POST', body: JSON.stringify(data) }),
   updateAnswer: (id, data) => request(`/api/questions/answers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAnswer: (id) => request(`/api/questions/answers/${id}`, { method: 'DELETE' }),
+  eliminateAnswer: (id, eliminated) => request(`/api/questions/answers/${id}/eliminate`, { method: 'POST', body: JSON.stringify({ eliminated }) }),
   cloneQuestion: (qId) => request(`/api/questions/${qId}/clone`, { method: 'POST' }),
   addContestantAnswers: (qId) => request(`/api/questions/${qId}/add-contestants`, { method: 'POST' }),
   resolveQuestion: (qId, answerIds) => request(`/api/questions/${qId}/resolve`, { method: 'POST', body: JSON.stringify({ answer_ids: Array.isArray(answerIds) ? answerIds : [answerIds] }) }),
