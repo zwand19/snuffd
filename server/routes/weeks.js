@@ -101,7 +101,7 @@ router.post('/', requireAdmin, async (req, res) => {
   try {
     const { rows } = await query(
       'INSERT INTO weeks (week_number, title, lock_time) VALUES ($1, $2, $3) RETURNING *',
-      [week_number, title || `Week ${week_number}`, lockTime]
+      [week_number, title || 'Poll', lockTime]
     );
     res.json(rows[0]);
   } catch (err) {

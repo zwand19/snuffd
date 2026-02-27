@@ -99,7 +99,7 @@ export default function WeekDetail({ user, setAppError }) {
     <div className="week-detail">
       <div className="week-header">
         <Link to="/" className="back-link">← Back to Dashboard</Link>
-        <h1>{week.title || `Week ${week.week_number}`}</h1>
+        <h1>{week.title || 'Poll'}</h1>
         <div className="week-meta">
           {isLocked ? (
             <span className="badge badge-locked">🔒 Locked</span>

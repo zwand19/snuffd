@@ -102,7 +102,7 @@ export default function Dashboard({ user, setAppError }) {
       {upcomingWeek && (
         <div className="card upcoming-card">
           <div className="card-header">
-            <h2>📋 {upcomingWeek.title || `Week ${upcomingWeek.week_number}`}</h2>
+            <h2>📋 {upcomingWeek.title || 'Poll'}</h2>
             <span className="lock-time">
               Locks: {new Date(upcomingWeek.lock_time).toLocaleString('en-US', {
                 weekday: 'short', month: 'short', day: 'numeric',
@@ -306,8 +306,7 @@ export default function Dashboard({ user, setAppError }) {
           <div className="week-grid">
             {lockedWeeks.map(w => (
               <Link key={w.id} to={`/weeks/${w.id}`} className="week-link">
-                <span className="week-number">Week {w.week_number}</span>
-                <span className="week-title">{w.title}</span>
+                <span className="week-number">{w.title || 'Poll'}</span>
               </Link>
             ))}
           </div>

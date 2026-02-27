@@ -624,7 +624,7 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
   return (
     <div className="week-editor">
       <button onClick={onBack} className="btn btn-sm back-btn">← Back to Weeks</button>
-      <h2>Edit: {week.title || `Week ${week.week_number}`}</h2>
+      <h2>Edit: {week.title || 'Poll'}</h2>
 
       <div className="week-settings">
         <div className="form-row">
@@ -1012,8 +1012,7 @@ export default function AdminPanel({ setAppError }) {
             {weeks.map(w => (
               <div key={w.id} className="week-list-item">
                 <div>
-                  <strong>Week {w.week_number}</strong>
-                  {w.title && w.title !== `Week ${w.week_number}` ? ` — ${w.title}` : ''}
+                  <strong>{w.title || 'Poll'}</strong> <span className="text-muted">(#{w.week_number})</span>
                   <span className="lock-time-small">
                     {new Date(w.lock_time).toLocaleString()}
                   </span>
