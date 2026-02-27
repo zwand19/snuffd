@@ -63,7 +63,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 });
 
 router.post('/email', requireAdmin, async (req, res) => {
-  const { subject, markdown } = req.body;
+  const { subject, markdown, mode } = req.body;
   if (!subject || !markdown) {
     return res.status(400).json({ error: 'Subject and markdown are required' });
   }
@@ -81,14 +81,37 @@ router.post('/email', requireAdmin, async (req, res) => {
   });
 
   try {
+    const bodyHtml = marked(markdown);
+
+    if (mode === 'test') {
+      const html = buildEmailHtml(bodyHtml).replace(/\{\{name\}\}/g, 'Test User');
+      await transporter.sendMail({
+        from: `Snuffd <${gmailUser}>`,
+        to: gmailUser,
+        subject: `[TEST] ${subject}`,
+        html,
+      });
+      return res.json({ sent: 1, failed: 0, total: 1 });
+    }
+
     const { rows: users } = await query('SELECT email, name FROM users ORDER BY name');
     if (users.length === 0) {
       return res.status(400).json({ error: 'No users to email' });
     }
 
-    const bodyHtml = marked(markdown);
-    const html = buildEmailHtml(bodyHtml);
+    if (mode === 'all') {
+      const html = buildEmailHtml(bodyHtml).replace(/\{\{name\}\}/g, 'everyone');
+      await transporter.sendMail({
+        from: `Snuffd <${gmailUser}>`,
+        to: gmailUser,
+        bcc: users.map(u => u.email),
+        subject,
+        html,
+      });
+      return res.json({ sent: users.length, failed: 0, total: users.length });
+    }
 
+    const html = buildEmailHtml(bodyHtml);
     const results = await Promise.allSettled(
       users.map(u =>
         transporter.sendMail({

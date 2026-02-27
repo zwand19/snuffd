@@ -68,17 +68,17 @@ function EmailComposer({ onClose }) {
   const [result, setResult] = useState(null);
   const [previewing, setPreviewing] = useState(false);
 
-  async function send() {
+  async function send(mode) {
     if (!subject.trim() || !markdown.trim()) {
       return;
     }
-    if (!confirm(`Send this email to ALL users?`)) {
+    if (mode !== 'test' && !confirm(`Send this email to ${mode === 'all' ? 'ALL users (single email)' : 'each user individually'}?`)) {
       return;
     }
     setSending(true);
     setResult(null);
     try {
-      const res = await api.emailUsers({ subject: subject.trim(), markdown: markdown.trim() });
+      const res = await api.emailUsers({ subject: subject.trim(), markdown: markdown.trim(), mode });
       setResult(res);
     } catch (err) {
       setResult({ error: err.message });
@@ -147,13 +147,29 @@ function EmailComposer({ onClose }) {
             Use <code>{'{{name}}'}</code> to insert each user's name. Supports **bold**, *italic*, lists, links, etc.
           </p>
         </div>
-        <button
-          onClick={send}
-          disabled={sending || !subject.trim() || !markdown.trim()}
-          className="btn btn-primary"
-        >
-          {sending ? 'Sending...' : 'Send to All Users'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => send('test')}
+            disabled={sending || !subject.trim() || !markdown.trim()}
+            className="btn"
+          >
+            {sending ? 'Sending...' : '🧪 Send Test to Me'}
+          </button>
+          <button
+            onClick={() => send('individual')}
+            disabled={sending || !subject.trim() || !markdown.trim()}
+            className="btn btn-secondary"
+          >
+            {sending ? 'Sending...' : '📧 Send Individually'}
+          </button>
+          <button
+            onClick={() => send('all')}
+            disabled={sending || !subject.trim() || !markdown.trim()}
+            className="btn btn-primary"
+          >
+            {sending ? 'Sending...' : '📨 Send to All (BCC)'}
+          </button>
+        </div>
       </div>
     </div>
   );
