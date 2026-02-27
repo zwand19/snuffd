@@ -83,9 +83,11 @@ export const api = {
   updateAnswer: (id, data) => request(`/api/questions/answers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAnswer: (id) => request(`/api/questions/answers/${id}`, { method: 'DELETE' }),
   eliminateAnswer: (id, eliminated) => request(`/api/questions/answers/${id}/eliminate`, { method: 'POST', body: JSON.stringify({ eliminated }) }),
+  setAnswerCorrect: (id, correct) => request(`/api/questions/answers/${id}/correct`, { method: 'POST', body: JSON.stringify({ correct }) }),
+  setAnswerOccurrences: (id, occurrences) => request(`/api/questions/answers/${id}/occurrences`, { method: 'POST', body: JSON.stringify({ occurrences }) }),
   cloneQuestion: (qId) => request(`/api/questions/${qId}/clone`, { method: 'POST' }),
   addContestantAnswers: (qId) => request(`/api/questions/${qId}/add-contestants`, { method: 'POST' }),
-  resolveQuestion: (qId, answerIds) => request(`/api/questions/${qId}/resolve`, { method: 'POST', body: JSON.stringify({ answer_ids: Array.isArray(answerIds) ? answerIds : [answerIds] }) }),
+  resolveQuestion: (qId) => request(`/api/questions/${qId}/resolve`, { method: 'POST' }),
   unresolveQuestion: (qId) => request(`/api/questions/${qId}/unresolve`, { method: 'POST' }),
 
   submitPicks: (picks) => request('/api/picks', { method: 'POST', body: JSON.stringify({ picks }) }),

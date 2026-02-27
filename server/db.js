@@ -95,6 +95,10 @@ async function initDb() {
     ALTER TABLE questions ADD COLUMN IF NOT EXISTS required_answers INTEGER DEFAULT 1;
 
     ALTER TABLE answers ADD COLUMN IF NOT EXISTS is_eliminated INTEGER DEFAULT 0;
+    ALTER TABLE answers ADD COLUMN IF NOT EXISTS occurrences INTEGER DEFAULT 0;
+
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS scoring_type TEXT DEFAULT 'standard';
+    ALTER TABLE questions ADD COLUMN IF NOT EXISTS estimated_occurrences INTEGER DEFAULT 0;
 
     DO $$ BEGIN
       IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'picks_user_id_question_id_key') THEN

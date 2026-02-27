@@ -84,25 +84,26 @@ router.get('/rankings', requireAuth, async (req, res) => {
     const now = new Date().toISOString();
     const { rows: users } = await query('SELECT id, name FROM users ORDER BY name');
     const { rows: startedQuestions } = await query(
-      `SELECT q.id, q.points, q.resolved
+      `SELECT q.id, q.points, q.resolved, q.scoring_type, q.estimated_occurrences
        FROM questions q JOIN weeks w ON q.week_id = w.id
        WHERE w.lock_time <= $1`,
       [now]
     );
     const { rows: allAnswers } = await query(
-      'SELECT id, question_id, points_override, is_correct, is_eliminated FROM answers'
+      'SELECT id, question_id, points_override, is_correct, is_eliminated, occurrences FROM answers'
     );
     const { rows: allPicks } = await query(
       'SELECT user_id, question_id, answer_id FROM picks'
     );
 
     const answerMap = {};
-    const correctAnswerIds = new Set();
+    const answersByQuestion = {};
     for (const a of allAnswers) {
       answerMap[a.id] = a;
-      if (a.is_correct) {
-        correctAnswerIds.add(a.id);
+      if (!answersByQuestion[a.question_id]) {
+        answersByQuestion[a.question_id] = [];
       }
+      answersByQuestion[a.question_id].push(a);
     }
 
     const picksByUser = {};
@@ -129,18 +130,27 @@ router.get('/rankings', requireAuth, async (req, res) => {
         if (!q) {
           continue;
         }
-        if (q.resolved) {
-          if (correctAnswerIds.has(pick.answer_id)) {
-            const pickedAnswer = answerMap[pick.answer_id];
-            const earned = pickedAnswer?.points_override ?? q.points;
-            score += earned;
-            potentialScore += earned;
+        const pickedAnswer = answerMap[pick.answer_id];
+        const basePoints = pickedAnswer?.points_override ?? q.points;
+
+        if (q.scoring_type === 'occurrence') {
+          const earned = basePoints * (pickedAnswer?.occurrences || 0);
+          score += earned;
+          potentialScore += earned;
+          if (!q.resolved) {
+            const totalOcc = (answersByQuestion[q.id] || [])
+              .reduce((sum, a) => sum + (a.occurrences || 0), 0);
+            const remaining = Math.max(0, (q.estimated_occurrences || 0) - totalOcc);
+            potentialScore += remaining * basePoints;
           }
         } else {
-          const pickedAnswer = answerMap[pick.answer_id];
-          if (!pickedAnswer?.is_eliminated) {
-            const possiblePoints = pickedAnswer?.points_override ?? q.points;
-            potentialScore += possiblePoints;
+          if (pickedAnswer?.is_correct) {
+            score += basePoints;
+            potentialScore += basePoints;
+          } else if (q.resolved || pickedAnswer?.is_eliminated) {
+            // resolved wrong or eliminated — no points
+          } else {
+            potentialScore += basePoints;
           }
         }
       }

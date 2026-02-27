@@ -41,6 +41,34 @@ router.post('/answers/:id/eliminate', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/answers/:id/correct', requireAdmin, async (req, res) => {
+  const { correct } = req.body;
+  try {
+    const { rows } = await query(
+      'UPDATE answers SET is_correct = $1 WHERE id = $2 RETURNING *',
+      [correct ? 1 : 0, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/answers/:id/occurrences', requireAdmin, async (req, res) => {
+  const { occurrences } = req.body;
+  try {
+    const { rows } = await query(
+      'UPDATE answers SET occurrences = $1 WHERE id = $2 RETURNING *',
+      [Math.max(0, occurrences || 0), req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.delete('/answers/:id', requireAdmin, async (req, res) => {
   try {
     await query('DELETE FROM answers WHERE id = $1', [req.params.id]);
@@ -52,14 +80,14 @@ router.delete('/answers/:id', requireAdmin, async (req, res) => {
 });
 
 router.post('/', requireAdmin, async (req, res) => {
-  const { week_id, text, points, sort_order, required_answers } = req.body;
+  const { week_id, text, points, sort_order, required_answers, scoring_type, estimated_occurrences } = req.body;
   if (!week_id || !text) {
     return res.status(400).json({ error: 'week_id and text are required' });
   }
   try {
     const { rows } = await query(
-      'INSERT INTO questions (week_id, text, points, sort_order, required_answers) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [week_id, text, points || 1, sort_order || 0, required_answers || 1]
+      'INSERT INTO questions (week_id, text, points, sort_order, required_answers, scoring_type, estimated_occurrences) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [week_id, text, points || 1, sort_order || 0, required_answers || 1, scoring_type || 'standard', estimated_occurrences || 0]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -69,7 +97,7 @@ router.post('/', requireAdmin, async (req, res) => {
 });
 
 router.put('/:id', requireAdmin, async (req, res) => {
-  const { text, points, sort_order, required_answers } = req.body;
+  const { text, points, sort_order, required_answers, scoring_type, estimated_occurrences } = req.body;
   let i = 1;
   const setClauses = [];
   const values = [];
@@ -77,6 +105,8 @@ router.put('/:id', requireAdmin, async (req, res) => {
   if (points !== undefined) { setClauses.push(`points = $${i++}`); values.push(points); }
   if (sort_order !== undefined) { setClauses.push(`sort_order = $${i++}`); values.push(sort_order); }
   if (required_answers !== undefined) { setClauses.push(`required_answers = $${i++}`); values.push(required_answers); }
+  if (scoring_type !== undefined) { setClauses.push(`scoring_type = $${i++}`); values.push(scoring_type); }
+  if (estimated_occurrences !== undefined) { setClauses.push(`estimated_occurrences = $${i++}`); values.push(estimated_occurrences); }
   if (setClauses.length === 0) {
     return res.status(400).json({ error: 'No updates' });
   }
@@ -141,8 +171,8 @@ router.post('/:id/clone', requireAdmin, async (req, res) => {
     const nextOrder = (parseInt(maxRow?.m) || 0) + 1;
 
     const { rows: [cloned] } = await query(
-      'INSERT INTO questions (week_id, text, points, sort_order, required_answers) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [orig.week_id, newText, orig.points, nextOrder, orig.required_answers || 1]
+      'INSERT INTO questions (week_id, text, points, sort_order, required_answers, scoring_type, estimated_occurrences) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [orig.week_id, newText, orig.points, nextOrder, orig.required_answers || 1, orig.scoring_type || 'standard', orig.estimated_occurrences || 0]
     );
 
     const { rows: answers } = await query(
@@ -207,21 +237,9 @@ router.post('/:id/add-contestants', requireAdmin, async (req, res) => {
 });
 
 router.post('/:id/resolve', requireAdmin, async (req, res) => {
-  const { answer_id, answer_ids } = req.body;
-  const ids = answer_ids || (answer_id ? [answer_id] : []);
-  if (ids.length === 0) {
-    return res.status(400).json({ error: 'answer_id or answer_ids is required' });
-  }
   const qId = req.params.id;
   try {
-    await query('UPDATE answers SET is_correct = 0 WHERE question_id = $1', [qId]);
-    const ph = ids.map((_, i) => `$${i + 2}`).join(',');
-    await query(
-      `UPDATE answers SET is_correct = 1 WHERE id IN (${ph}) AND question_id = $1`,
-      [qId, ...ids]
-    );
     await query('UPDATE questions SET resolved = 1 WHERE id = $1', [qId]);
-
     const { rows: [question] } = await query('SELECT * FROM questions WHERE id = $1', [qId]);
     const { rows: answers } = await query(
       'SELECT * FROM answers WHERE question_id = $1 ORDER BY sort_order ASC, id ASC',
@@ -237,7 +255,6 @@ router.post('/:id/resolve', requireAdmin, async (req, res) => {
 router.post('/:id/unresolve', requireAdmin, async (req, res) => {
   const qId = req.params.id;
   try {
-    await query('UPDATE answers SET is_correct = 0 WHERE question_id = $1', [qId]);
     await query('UPDATE questions SET resolved = 0 WHERE id = $1', [qId]);
     const { rows: [question] } = await query('SELECT * FROM questions WHERE id = $1', [qId]);
     res.json(question);

@@ -236,7 +236,12 @@ export default function WeekDetail({ user, setAppError }) {
                 <span className="question-number">Q{qi + 1}</span>
                 <span className="question-text">{q.text}</span>
                 <span className="question-points">
-                  {isMulti ? `${q.points} pt${q.points !== 1 ? 's' : ''} each` : `${q.points} pt${q.points !== 1 ? 's' : ''}`}
+                  {q.scoring_type === 'occurrence'
+                    ? `${q.points} pt${q.points !== 1 ? 's' : ''}/occ`
+                    : isMulti
+                      ? `${q.points} pt${q.points !== 1 ? 's' : ''} each`
+                      : `${q.points} pt${q.points !== 1 ? 's' : ''}`
+                  }
                 </span>
                 {isMulti && !isLocked && (
                   <span className="badge badge-pick-count">
@@ -282,8 +287,8 @@ export default function WeekDetail({ user, setAppError }) {
                         className={[
                           'answer-option',
                           isSelected ? 'selected' : '',
-                          isLocked && isCorrect ? 'correct' : '',
-                          isLocked && wasMyPick && !isCorrect && q.resolved ? 'incorrect' : '',
+                          isCorrect ? 'correct' : '',
+                          isLocked && wasMyPick && !isCorrect && (q.resolved || isEliminated) ? 'incorrect' : '',
                           isEliminated ? 'eliminated' : '',
                         ].join(' ')}
                       >
@@ -320,7 +325,12 @@ export default function WeekDetail({ user, setAppError }) {
                         {a.points_override != null && (
                           <span className="answer-points">{a.points_override} pts</span>
                         )}
-                        {isLocked && isCorrect && <span className="correct-marker">✓</span>}
+                        {q.scoring_type === 'occurrence' && isLocked && (
+                          <span className="answer-occ" style={{ color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 600 }}>
+                            ×{a.occurrences || 0}
+                          </span>
+                        )}
+                        {isCorrect && <span className="correct-marker">✓</span>}
                         {isEliminated && <span className="eliminated-marker">✗</span>}
                         {isLocked && wasMyPick && <span className="my-pick-marker">Your pick</span>}
                       </label>

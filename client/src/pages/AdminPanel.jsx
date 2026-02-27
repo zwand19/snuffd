@@ -299,15 +299,18 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
   const [text, setText] = useState(q.text);
   const [points, setPoints] = useState(q.points);
   const [requiredAnswers, setRequiredAnswers] = useState(q.required_answers || 1);
+  const [scoringType, setScoringType] = useState(q.scoring_type || 'standard');
+  const [estimatedOcc, setEstimatedOcc] = useState(q.estimated_occurrences || 0);
   const [editingAnswerId, setEditingAnswerId] = useState(null);
   const [editAnswerPts, setEditAnswerPts] = useState('');
-  const [correctIds, setCorrectIds] = useState(
-    q.answers.filter(a => a.is_correct).map(a => a.id)
-  );
+  const isOccurrence = (q.scoring_type || 'standard') === 'occurrence';
   const isMulti = (q.required_answers || 1) > 1;
 
   async function saveQuestion() {
-    await api.updateQuestion(q.id, { text, points, required_answers: requiredAnswers });
+    await api.updateQuestion(q.id, {
+      text, points, required_answers: requiredAnswers,
+      scoring_type: scoringType, estimated_occurrences: estimatedOcc,
+    });
     setEditing(false);
     onUpdate();
   }
@@ -333,38 +336,75 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
     onUpdate();
   }
 
+  async function toggleCorrect(a) {
+    await api.setAnswerCorrect(a.id, !a.is_correct);
+    onUpdate();
+  }
+
   async function toggleEliminated(a) {
     await api.eliminateAnswer(a.id, !a.is_eliminated);
     onUpdate();
   }
+
+  async function setOccurrences(a, delta) {
+    const next = Math.max(0, (a.occurrences || 0) + delta);
+    await api.setAnswerOccurrences(a.id, next);
+    onUpdate();
+  }
+
+  const totalOcc = q.answers.reduce((sum, a) => sum + (a.occurrences || 0), 0);
 
   return (
     <div className={`card question-edit-card ${q.resolved ? 'resolved' : ''}`}>
       <div className="question-edit-header">
         <span className="question-number">Q{index + 1}</span>
         {editing ? (
-          <div className="inline-form flex-1" style={{ marginBottom: 0 }}>
-            <input value={text} onChange={e => setText(e.target.value)} className="input flex-1" />
-            <input
-              type="number" value={points}
-              onChange={e => setPoints(parseInt(e.target.value) || 1)}
-              className="input input-sm" style={{ width: '70px' }} min="1"
-            />
-            <span className="input-label">pts</span>
-            <input
-              type="number" value={requiredAnswers}
-              onChange={e => setRequiredAnswers(parseInt(e.target.value) || 1)}
-              className="input input-sm" style={{ width: '70px' }} min="1"
-            />
-            <span className="input-label">picks</span>
-            <button onClick={saveQuestion} className="btn btn-sm btn-primary">Save</button>
-            <button onClick={() => setEditing(false)} className="btn btn-sm">Cancel</button>
+          <div style={{ flex: 1 }}>
+            <div className="inline-form" style={{ marginBottom: '0.5rem' }}>
+              <input value={text} onChange={e => setText(e.target.value)} className="input flex-1" />
+              <input
+                type="number" value={points}
+                onChange={e => setPoints(parseInt(e.target.value) || 1)}
+                className="input input-sm" style={{ width: '70px' }} min="1"
+              />
+              <span className="input-label">pts</span>
+              <input
+                type="number" value={requiredAnswers}
+                onChange={e => setRequiredAnswers(parseInt(e.target.value) || 1)}
+                className="input input-sm" style={{ width: '70px' }} min="1"
+              />
+              <span className="input-label">picks</span>
+            </div>
+            <div className="inline-form" style={{ marginBottom: 0 }}>
+              <select
+                value={scoringType}
+                onChange={e => setScoringType(e.target.value)}
+                className="input input-sm"
+                style={{ width: 'auto' }}
+              >
+                <option value="standard">Standard</option>
+                <option value="occurrence">Per Occurrence</option>
+              </select>
+              {scoringType === 'occurrence' && (
+                <>
+                  <input
+                    type="number" value={estimatedOcc}
+                    onChange={e => setEstimatedOcc(parseInt(e.target.value) || 0)}
+                    className="input input-sm" style={{ width: '80px' }} min="0"
+                  />
+                  <span className="input-label">est. occurrences</span>
+                </>
+              )}
+              <button onClick={saveQuestion} className="btn btn-sm btn-primary">Save</button>
+              <button onClick={() => setEditing(false)} className="btn btn-sm">Cancel</button>
+            </div>
           </div>
         ) : (
           <>
             <span className="question-text flex-1">{q.text}</span>
             <span className="question-points">
               {q.points} pts{isMulti ? ` · pick ${q.required_answers}` : ''}
+              {isOccurrence ? ` · per occ (est ${q.estimated_occurrences})` : ''}
             </span>
             <button onClick={() => setEditing(true)} className="btn btn-sm">Edit</button>
             <button onClick={onClone} className="btn btn-sm btn-secondary">Clone</button>
@@ -376,19 +416,6 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
       <div className="answers-editor">
         {q.answers.map(a => (
           <div key={a.id} className={`answer-edit-item ${a.is_correct ? 'correct' : ''} ${a.is_eliminated ? 'eliminated' : ''}`}>
-            {!q.resolved && (
-              <input
-                type="checkbox"
-                checked={correctIds.includes(a.id)}
-                disabled={a.is_eliminated}
-                onChange={() => {
-                  setCorrectIds(prev =>
-                    prev.includes(a.id) ? prev.filter(id => id !== a.id) : [...prev, a.id]
-                  );
-                }}
-                title="Toggle correct"
-              />
-            )}
             <span className={`answer-text flex-1 ${a.is_eliminated ? 'text-strikethrough' : ''}`}>{a.text}</span>
             {editingAnswerId === a.id ? (
               <div className="inline-form" style={{ marginBottom: 0, gap: '0.3rem' }}>
@@ -414,17 +441,34 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
                 {a.points_override != null ? `${a.points_override} pts` : 'Set pts'}
               </button>
             )}
-            {!q.resolved && (
-              <button
-                onClick={() => toggleEliminated(a)}
-                className={`btn btn-xs ${a.is_eliminated ? 'btn-warning' : 'btn-danger'}`}
-                title={a.is_eliminated ? 'Reinstate answer' : 'Mark incorrect'}
-              >
-                {a.is_eliminated ? '↩' : '✗'}
-              </button>
+            {isOccurrence ? (
+              <div className="inline-form" style={{ marginBottom: 0, gap: '0.25rem' }}>
+                <button onClick={() => setOccurrences(a, -1)} className="btn btn-xs" disabled={!a.occurrences}>−</button>
+                <span style={{ minWidth: '1.5rem', textAlign: 'center', fontWeight: 600 }}>{a.occurrences || 0}</span>
+                <button onClick={() => setOccurrences(a, 1)} className="btn btn-xs">+</button>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={() => toggleCorrect(a)}
+                  className={`btn btn-xs ${a.is_correct ? 'btn-success' : ''}`}
+                  disabled={a.is_eliminated}
+                  title={a.is_correct ? 'Unmark correct' : 'Mark correct'}
+                >
+                  ✓
+                </button>
+                <button
+                  onClick={() => toggleEliminated(a)}
+                  className={`btn btn-xs ${a.is_eliminated ? 'btn-warning' : 'btn-danger'}`}
+                  disabled={a.is_correct}
+                  title={a.is_eliminated ? 'Reinstate answer' : 'Mark incorrect'}
+                >
+                  {a.is_eliminated ? '↩' : '✗'}
+                </button>
+              </>
             )}
             {a.is_correct && <span className="badge badge-correct">Correct</span>}
-            {a.is_eliminated && !q.resolved && <span className="badge badge-eliminated">Eliminated</span>}
+            {a.is_eliminated && <span className="badge badge-eliminated">Eliminated</span>}
             <button onClick={() => onRemoveAnswer(a.id)} className="btn btn-xs btn-ghost">✕</button>
           </div>
         ))}
@@ -434,6 +478,12 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
           </p>
         )}
       </div>
+
+      {isOccurrence && (
+        <div style={{ padding: '0.5rem 1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          {totalOcc} / {q.estimated_occurrences || 0} occurrences distributed
+        </div>
+      )}
 
       <div className="question-actions">
         <form onSubmit={handleAddAnswer} className="inline-form" style={{ marginBottom: 0 }}>
@@ -446,17 +496,12 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
           <button type="submit" className="btn btn-sm">Add</button>
         </form>
         <button onClick={onAddContestants} className="btn btn-sm btn-secondary">+ All Contestants</button>
-        {!q.resolved && (
-          <button
-            onClick={() => onResolve(correctIds)}
-            className="btn btn-sm btn-success"
-            disabled={correctIds.length === 0}
-          >
-            Resolve ({correctIds.length} correct)
+        {!q.resolved ? (
+          <button onClick={onResolve} className="btn btn-sm btn-success">
+            Close Question
           </button>
-        )}
-        {q.resolved && (
-          <button onClick={onUnresolve} className="btn btn-sm btn-warning">Unresolve</button>
+        ) : (
+          <button onClick={onUnresolve} className="btn btn-sm btn-warning">Reopen</button>
         )}
       </div>
     </div>
@@ -470,6 +515,8 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
   const [newQText, setNewQText] = useState('');
   const [newQPoints, setNewQPoints] = useState(1);
   const [newQRequired, setNewQRequired] = useState(1);
+  const [newQScoringType, setNewQScoringType] = useState('standard');
+  const [newQEstOcc, setNewQEstOcc] = useState(0);
   const [submissionStatus, setSubmissionStatus] = useState(null);
   const [randomMsg, setRandomMsg] = useState('');
 
@@ -519,10 +566,16 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
     if (!newQText.trim()) {
       return;
     }
-    await api.createQuestion({ week_id: weekId, text: newQText.trim(), points: newQPoints, required_answers: newQRequired });
+    await api.createQuestion({
+      week_id: weekId, text: newQText.trim(), points: newQPoints,
+      required_answers: newQRequired, scoring_type: newQScoringType,
+      estimated_occurrences: newQEstOcc,
+    });
     setNewQText('');
     setNewQPoints(1);
     setNewQRequired(1);
+    setNewQScoringType('standard');
+    setNewQEstOcc(0);
     loadWeek();
   }
 
@@ -554,8 +607,8 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
     loadWeek();
   }
 
-  async function resolve(qId, answerId) {
-    await api.resolveQuestion(qId, answerId);
+  async function resolve(qId) {
+    await api.resolveQuestion(qId);
     loadWeek();
   }
 
@@ -623,26 +676,47 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
       })()}
 
       <h3>Questions</h3>
-      <form onSubmit={addQuestion} className="inline-form">
-        <input
-          value={newQText}
-          onChange={e => setNewQText(e.target.value)}
-          placeholder="Question text"
-          className="input flex-1"
-        />
-        <input
-          type="number" value={newQPoints}
-          onChange={e => setNewQPoints(parseInt(e.target.value) || 1)}
-          className="input input-sm" min="1" style={{ width: '70px' }}
-        />
-        <span className="input-label">pts</span>
-        <input
-          type="number" value={newQRequired}
-          onChange={e => setNewQRequired(parseInt(e.target.value) || 1)}
-          className="input input-sm" min="1" style={{ width: '70px' }}
-        />
-        <span className="input-label">picks</span>
-        <button type="submit" className="btn btn-primary">Add Question</button>
+      <form onSubmit={addQuestion}>
+        <div className="inline-form">
+          <input
+            value={newQText}
+            onChange={e => setNewQText(e.target.value)}
+            placeholder="Question text"
+            className="input flex-1"
+          />
+          <input
+            type="number" value={newQPoints}
+            onChange={e => setNewQPoints(parseInt(e.target.value) || 1)}
+            className="input input-sm" min="1" style={{ width: '70px' }}
+          />
+          <span className="input-label">pts</span>
+          <input
+            type="number" value={newQRequired}
+            onChange={e => setNewQRequired(parseInt(e.target.value) || 1)}
+            className="input input-sm" min="1" style={{ width: '70px' }}
+          />
+          <span className="input-label">picks</span>
+          <select
+            value={newQScoringType}
+            onChange={e => setNewQScoringType(e.target.value)}
+            className="input input-sm"
+            style={{ width: 'auto' }}
+          >
+            <option value="standard">Standard</option>
+            <option value="occurrence">Per Occurrence</option>
+          </select>
+          {newQScoringType === 'occurrence' && (
+            <>
+              <input
+                type="number" value={newQEstOcc}
+                onChange={e => setNewQEstOcc(parseInt(e.target.value) || 0)}
+                className="input input-sm" min="0" style={{ width: '80px' }}
+              />
+              <span className="input-label">est. occ</span>
+            </>
+          )}
+          <button type="submit" className="btn btn-primary">Add Question</button>
+        </div>
       </form>
 
       {week.questions.map((q, qi) => (
@@ -653,7 +727,7 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
           onAddContestants={() => addContestantAnswers(q.id)}
           onAddAnswer={(text) => addAnswer(q.id, text)}
           onRemoveAnswer={removeAnswer}
-          onResolve={(aId) => resolve(q.id, aId)}
+          onResolve={() => resolve(q.id)}
           onUnresolve={() => unresolve(q.id)}
           onDelete={() => deleteQuestion(q.id)}
           onClone={() => cloneQuestion(q.id)}
