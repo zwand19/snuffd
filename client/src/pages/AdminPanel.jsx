@@ -930,7 +930,7 @@ function TorchesTab({ contestants, onRefresh }) {
     setMessage('');
     try {
       const result = await api.awardTorchBonus(contestantId, bonusType);
-      const label = bonusType === 'idol_played' ? 'Idol played' : 'Immunity win';
+      const label = bonusType === 'idol_played' ? 'Idol played' : bonusType === 'immunity_win' ? 'Immunity win' : 'Sanctuary visit';
       setMessage(`${label}: +${result.amount} to ${result.affected} torch(es) for ${result.contestant_name}!`);
       loadTorches();
       onRefresh();
@@ -1002,6 +1002,7 @@ function TorchesTab({ contestants, onRefresh }) {
             <div className="torch-resolve-actions">
               <button onClick={() => awardBonus(c.id, 'idol_played')} className="btn btn-xs btn-primary">Idol +2</button>
               <button onClick={() => awardBonus(c.id, 'immunity_win')} className="btn btn-xs btn-secondary">Immunity +1</button>
+              <button onClick={() => awardBonus(c.id, 'sanctuary_visit')} className="btn btn-xs btn-secondary">Sanctuary +1</button>
             </div>
           </div>
         ))}

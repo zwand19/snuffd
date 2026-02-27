@@ -220,6 +220,7 @@ export default function Dashboard({ user, setAppError }) {
                 <ul>
                   <li>Idol played (prevents elim): <strong>+2</strong></li>
                   <li>Individual immunity win: <strong>+1</strong></li>
+                  <li>Visits the Sanctuary: <strong>+1</strong></li>
                 </ul>
               </div>
             </div>

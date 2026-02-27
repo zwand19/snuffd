@@ -29,4 +29,4 @@ Server runs on `:3001`, client on `:5173` (proxied).
 - **DB**: SQLite (zero config, stored as `snuffd.db`)
 
 ## Admin
-The email `zwand19@gmail.com` is auto-granted admin on first login.
+The email `z.wand19@gmail.com` is auto-granted admin on first login.

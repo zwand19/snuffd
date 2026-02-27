@@ -7,9 +7,10 @@ const router = Router();
 router.get('/', requireAuth, async (req, res) => {
   try {
     const { rows } = await query('SELECT * FROM weeks ORDER BY week_number ASC');
+    console.log(`[weeks] list: ${rows.length} weeks for ${req.user.email}`);
     res.json(rows);
   } catch (err) {
-    console.error(err);
+    console.error('[weeks] list error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -19,6 +20,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     const { rows: weekRows } = await query('SELECT * FROM weeks WHERE id = $1', [req.params.id]);
     const week = weekRows[0];
     if (!week) {
+      console.warn(`[weeks] week id=${req.params.id} not found`);
       return res.status(404).json({ error: 'Week not found' });
     }
 
@@ -64,6 +66,7 @@ router.get('/:id', requireAuth, async (req, res) => {
     }
 
     const isLocked = new Date(week.lock_time) <= new Date();
+    console.log(`[weeks] get week id=${week.id} "${week.title}" locked=${isLocked} questions=${questions.length} for ${req.user.email}`);
     res.json({
       ...week,
       is_locked: isLocked,
@@ -75,7 +78,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error(err);
+    console.error(`[weeks] get error id=${req.params.id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -98,14 +101,16 @@ router.post('/', requireAdmin, async (req, res) => {
     lockTime = wed.toISOString();
   }
 
+  console.log(`[weeks] create week_number=${week_number} title="${title || 'Poll'}" lockTime=${lockTime} by ${req.user.email}`);
   try {
     const { rows } = await query(
       'INSERT INTO weeks (week_number, title, lock_time) VALUES ($1, $2, $3) RETURNING *',
       [week_number, title || 'Poll', lockTime]
     );
+    console.log(`[weeks] created week id=${rows[0].id}`);
     res.json(rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error('[weeks] create error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -122,24 +127,28 @@ router.put('/:id', requireAdmin, async (req, res) => {
     return res.status(400).json({ error: 'No updates provided' });
   }
   values.push(req.params.id);
+  console.log(`[weeks] update id=${req.params.id} fields=${setClauses.join(',')} by ${req.user.email}`);
   try {
     const { rows } = await query(
       `UPDATE weeks SET ${setClauses.join(', ')} WHERE id = $${i} RETURNING *`,
       values
     );
+    console.log(`[weeks] updated week id=${req.params.id}`);
     res.json(rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error(`[weeks] update error id=${req.params.id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 router.delete('/:id', requireAdmin, async (req, res) => {
+  console.log(`[weeks] DELETE id=${req.params.id} by ${req.user.email}`);
   try {
     await query('DELETE FROM weeks WHERE id = $1', [req.params.id]);
+    console.log(`[weeks] deleted week id=${req.params.id}`);
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error(`[weeks] delete error id=${req.params.id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });

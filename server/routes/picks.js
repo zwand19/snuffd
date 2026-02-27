@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { pool, query } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { sendSlackNotification } = require('../slack');
 
 const router = Router();
 
@@ -10,6 +11,7 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Picks array is required' });
   }
 
+  console.log(`[picks] submit ${picks.length} picks for user ${req.user.email} id=${req.user.id}`);
   try {
     const uniqueQIds = [...new Set(picks.map(p => p.question_id))];
     const ph = uniqueQIds.map((_, i) => `$${i + 1}`).join(',');
@@ -26,6 +28,7 @@ router.post('/', requireAuth, async (req, res) => {
 
     for (const q of questions) {
       if (new Date(q.lock_time) <= new Date()) {
+        console.warn(`[picks] user ${req.user.email} attempted to pick on locked question id=${q.id}`);
         return res.status(400).json({ error: 'Poll is locked' });
       }
     }
@@ -50,10 +53,16 @@ router.post('/', requireAuth, async (req, res) => {
       }
     }
 
+    const delPh = uniqueQIds.map((_, i) => `$${i + 2}`).join(',');
+    const { rows: existingPicks } = await query(
+      `SELECT question_id FROM picks WHERE user_id = $1 AND question_id IN (${delPh})`,
+      [req.user.id, ...uniqueQIds]
+    );
+    const isEdit = existingPicks.length > 0;
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const delPh = uniqueQIds.map((_, i) => `$${i + 2}`).join(',');
       await client.query(
         `DELETE FROM picks WHERE user_id = $1 AND question_id IN (${delPh})`,
         [req.user.id, ...uniqueQIds]
@@ -72,14 +81,18 @@ router.post('/', requireAuth, async (req, res) => {
       client.release();
     }
 
+    console.log(`[picks] saved ${picks.length} picks for user ${req.user.email} across ${uniqueQIds.length} question(s)`);
+    const action = isEdit ? 'edited their poll picks' : 'submitted poll picks';
+    sendSlackNotification(`📊 *${req.user.name}* ${action} (${uniqueQIds.length} question${uniqueQIds.length !== 1 ? 's' : ''})`);
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error(`[picks] submit error for user ${req.user.email}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 router.get('/rankings', requireAuth, async (req, res) => {
+  console.log(`[picks] rankings requested by ${req.user.email}`);
   try {
     const now = new Date().toISOString();
     const { rows: users } = await query('SELECT id, name FROM users ORDER BY name');
@@ -159,15 +172,17 @@ router.get('/rankings', requireAuth, async (req, res) => {
     });
 
     rankings.sort((a, b) => b.score - a.score || b.potentialScore - a.potentialScore);
+    console.log(`[picks] rankings: ${rankings.length} users, top score=${rankings[0]?.score ?? 0}`);
     res.json(rankings);
   } catch (err) {
-    console.error(err);
+    console.error('[picks] rankings error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 router.get('/status/:weekId', requireAuth, async (req, res) => {
   const weekId = req.params.weekId;
+  console.log(`[picks] status for week id=${weekId} requested by ${req.user.email}`);
   try {
     const { rows: users } = await query('SELECT id, name FROM users ORDER BY name');
     const { rows: [countRow] } = await query(
@@ -213,6 +228,7 @@ router.post('/random/:weekId', requireAdmin, async (req, res) => {
   if (!Array.isArray(user_ids) || user_ids.length === 0) {
     return res.status(400).json({ error: 'user_ids array is required' });
   }
+  console.log(`[picks] random picks for week id=${weekId} users=${user_ids.length} by ${req.user.email}`);
 
   try {
     const { rows: questions } = await query(
@@ -245,6 +261,7 @@ router.post('/random/:weekId', requireAdmin, async (req, res) => {
         }
       }
       await client.query('COMMIT');
+      console.log(`[picks] random picks saved for ${user_ids.length} users in week id=${weekId}`);
       res.json({ success: true, count: user_ids.length });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -253,7 +270,7 @@ router.post('/random/:weekId', requireAdmin, async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error(err);
+    console.error('[picks] random error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });

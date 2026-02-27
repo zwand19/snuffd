@@ -21,6 +21,16 @@ const allowedOrigins = process.env.ALLOWED_ORIGIN
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const user = req.user?.email || req.user?.name || 'anon';
+    console.log(`[${req.method}] ${req.path} ${res.statusCode} ${ms}ms - ${user}`);
+  });
+  next();
+});
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 app.post('/api/auth/sync', jwtCheck, syncUser);

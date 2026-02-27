@@ -7,17 +7,20 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const router = Router();
 
 router.get('/me', requireAuth, (req, res) => {
+  console.log(`[users] /me -> ${req.user.email} id=${req.user.id} admin=${req.user.is_admin}`);
   res.json(req.user);
 });
 
 router.get('/', requireAdmin, async (req, res) => {
+  console.log(`[users] list all users requested by ${req.user.email}`);
   try {
     const { rows } = await query(
       'SELECT id, email, name, is_admin, created_at FROM users ORDER BY name'
     );
+    console.log(`[users] returning ${rows.length} users`);
     res.json(rows);
   } catch (err) {
-    console.error(err);
+    console.error('[users] list error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -27,14 +30,16 @@ router.put('/:id', requireAdmin, async (req, res) => {
   if (!name) {
     return res.status(400).json({ error: 'Name is required' });
   }
+  console.log(`[users] update id=${req.params.id} name="${name}" by ${req.user.email}`);
   try {
     const { rows } = await query(
       'UPDATE users SET name = $1 WHERE id = $2 RETURNING id, email, name, is_admin, created_at',
       [name, req.params.id]
     );
+    console.log(`[users] updated user id=${req.params.id}`);
     res.json(rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error(`[users] update error id=${req.params.id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -44,6 +49,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
   if (parseInt(userId) === req.user.id) {
     return res.status(400).json({ error: 'Cannot delete yourself' });
   }
+  console.log(`[users] DELETE id=${userId} requested by ${req.user.email}`);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -52,10 +58,11 @@ router.delete('/:id', requireAdmin, async (req, res) => {
     await client.query('DELETE FROM picks WHERE user_id = $1', [userId]);
     await client.query('DELETE FROM users WHERE id = $1', [userId]);
     await client.query('COMMIT');
+    console.log(`[users] deleted user id=${userId} and all associated data`);
     res.json({ success: true });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
+    console.error(`[users] delete error id=${userId}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   } finally {
     client.release();
@@ -67,30 +74,44 @@ router.post('/email', requireAdmin, async (req, res) => {
   if (!subject || !markdown) {
     return res.status(400).json({ error: 'Subject and markdown are required' });
   }
-  if (!process.env.GMAIL_APP_PASSWORD) {
+
+  const rawPass = process.env.GMAIL_APP_PASSWORD;
+  const rawUser = process.env.GMAIL_USER;
+  console.log(`[users/email] GMAIL_APP_PASSWORD set=${!!rawPass} length=${rawPass?.length ?? 0} preview="${rawPass ? rawPass.slice(0, 4) + '****' : 'MISSING'}"`);
+  console.log(`[users/email] GMAIL_USER set=${!!rawUser} value="${rawUser || '(not set, using default)'}"`);
+
+  if (!rawPass) {
+    console.error('[users/email] Aborting: GMAIL_APP_PASSWORD is not configured');
     return res.status(500).json({ error: 'GMAIL_APP_PASSWORD is not configured' });
   }
 
-  const gmailUser = process.env.GMAIL_USER || 'z.wand19@gmail.com';
+  console.log(`[users/email] request from ${req.user.email} mode=${mode} subject="${subject}"`);
+  const gmailUser = rawUser || 'z.wand19@gmail.com';
   const transporter = nodemailer.createTransport({
     service: 'gmail',
+    family: 4,
     auth: {
       user: gmailUser,
-      pass: process.env.GMAIL_APP_PASSWORD,
+      pass: rawPass,
     },
   });
 
   try {
+    console.log('[users/email] verifying transporter connection...');
+    await transporter.verify();
+    console.log('[users/email] transporter verified OK');
+
     const bodyHtml = marked(markdown);
 
     if (mode === 'test') {
-      const html = buildEmailHtml(bodyHtml).replace(/\{\{name\}\}/g, 'Test User');
+      console.log(`[users/email] sending test email from=${gmailUser} to=${gmailUser}`);
       await transporter.sendMail({
         from: `Snuffd <${gmailUser}>`,
         to: gmailUser,
         subject: `[TEST] ${subject}`,
-        html,
+        html: buildEmailHtml(bodyHtml).replace(/\{\{name\}\}/g, 'Test User'),
       });
+      console.log('[users/email] test email sent successfully');
       return res.json({ sent: 1, failed: 0, total: 1 });
     }
 
@@ -100,6 +121,7 @@ router.post('/email', requireAdmin, async (req, res) => {
     }
 
     if (mode === 'all') {
+      console.log(`[users] sending bulk BCC email to ${users.length} users`);
       const html = buildEmailHtml(bodyHtml).replace(/\{\{name\}\}/g, 'everyone');
       await transporter.sendMail({
         from: `Snuffd <${gmailUser}>`,
@@ -108,9 +130,11 @@ router.post('/email', requireAdmin, async (req, res) => {
         subject,
         html,
       });
+      console.log(`[users] bulk BCC email sent to ${users.length} users`);
       return res.json({ sent: users.length, failed: 0, total: users.length });
     }
 
+    console.log(`[users] sending individual emails to ${users.length} users`);
     const html = buildEmailHtml(bodyHtml);
     const results = await Promise.allSettled(
       users.map(u =>
@@ -125,9 +149,19 @@ router.post('/email', requireAdmin, async (req, res) => {
 
     const sent = results.filter(r => r.status === 'fulfilled').length;
     const failed = results.filter(r => r.status === 'rejected').length;
+    console.log(`[users] email results: sent=${sent} failed=${failed} total=${users.length}`);
+    if (failed > 0) {
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          console.error(`[users] email failed for ${users[i].email}:`, r.reason?.message);
+        }
+      });
+    }
     res.json({ sent, failed, total: users.length });
   } catch (err) {
-    console.error(err);
+    console.error('[users/email] send error:', err.message);
+    console.error('[users/email] error code:', err.code);
+    console.error('[users/email] error response:', err.response);
     res.status(500).json({ error: 'Failed to send emails' });
   }
 });

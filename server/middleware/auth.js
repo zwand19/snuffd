@@ -16,14 +16,19 @@ async function loadUser(req, res, next) {
   try {
     const { rows } = await query('SELECT * FROM users WHERE auth0_id = $1', [sub]);
     req.user = rows[0] || null;
+    if (!req.user) {
+      console.warn(`[auth] No DB user found for sub=${sub}`);
+    }
     next();
   } catch (err) {
+    console.error(`[auth] loadUser error for sub=${sub}:`, err.message);
     next(err);
   }
 }
 
 function requireAuth(req, res, next) {
   if (!req.user) {
+    console.warn(`[auth] Unauthenticated request to ${req.method} ${req.path}`);
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
@@ -31,6 +36,7 @@ function requireAuth(req, res, next) {
 
 function requireAdmin(req, res, next) {
   if (!req.user?.is_admin) {
+    console.warn(`[auth] Non-admin ${req.user?.email} attempted ${req.method} ${req.path}`);
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -49,12 +55,16 @@ async function syncUser(req, res) {
     if (!user) {
       const isAdmin = email.toLowerCase() === ADMIN_EMAIL ? 1 : 0;
       const displayName = name || email.split('@')[0];
+      console.log(`[auth] New user registering: ${displayName} (${email}) admin=${isAdmin}`);
       const inserted = await query(
         'INSERT INTO users (auth0_id, email, name, is_admin) VALUES ($1, $2, $3, $4) RETURNING *',
         [sub, email.toLowerCase(), displayName, isAdmin]
       );
       user = inserted.rows[0];
+      console.log(`[auth] Created user id=${user.id} email=${email}`);
       sendSlackNotification(`New Snuffd player joined: ${displayName} (${email})`);
+    } else {
+      console.log(`[auth] User synced: ${user.email} id=${user.id}`);
     }
     res.json(user);
   } catch (err) {

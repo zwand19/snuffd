@@ -1,10 +1,12 @@
 const { Router } = require('express');
 const { pool, query } = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { sendSlackNotification } = require('../slack');
 
 const router = Router();
 
 router.get('/', requireAuth, async (req, res) => {
+  console.log(`[torches] list requested by ${req.user.email}`);
   try {
     const { rows: torches } = await query(
       `SELECT t.user_id, t.contestant_id, t.points, t.needs_switch,
@@ -14,9 +16,10 @@ router.get('/', requireAuth, async (req, res) => {
        LEFT JOIN contestants c ON t.contestant_id = c.id
        ORDER BY t.points DESC`
     );
+    console.log(`[torches] list: ${torches.length} entries`);
     res.json(torches);
   } catch (err) {
-    console.error(err);
+    console.error('[torches] list error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -79,6 +82,7 @@ router.post('/pick', requireAuth, async (req, res) => {
   if (!contestant_id) {
     return res.status(400).json({ error: 'contestant_id is required' });
   }
+  console.log(`[torches] pick contestant_id=${contestant_id} by ${req.user.email}`);
 
   const client = await pool.connect();
   try {
@@ -89,10 +93,12 @@ router.post('/pick', requireAuth, async (req, res) => {
       [contestant_id]
     );
     if (!contestant) {
+      console.warn(`[torches] contestant id=${contestant_id} not found`);
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Contestant not found' });
     }
     if (contestant.eliminated) {
+      console.warn(`[torches] user ${req.user.email} tried to pick eliminated contestant "${contestant.name}"`);
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Cannot pick an eliminated contestant' });
     }
@@ -113,6 +119,7 @@ router.post('/pick', requireAuth, async (req, res) => {
         [req.user.id, contestant_id]
       );
     } else if (existing.contestant_id === contestant_id) {
+      console.warn(`[torches] user ${req.user.email} already holds torch for contestant id=${contestant_id}`);
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Already holding torch for this contestant' });
     } else if (existing.needs_switch) {
@@ -154,6 +161,16 @@ router.post('/pick', requireAuth, async (req, res) => {
 
     await client.query('COMMIT');
 
+    console.log(`[torches] ${req.user.email} action=${action} contestant="${contestant.name}" points=${pointsBefore}->${pointsAfter} penalty=${penalty}`);
+
+    const actionLabels = {
+      initial: `🔥 *${req.user.name}* picked their first torch: *${contestant.name}*`,
+      free_switch: `🔄 *${req.user.name}* switched their torch to *${contestant.name}* (free switch)`,
+      forced_switch: `🔄 *${req.user.name}* switched their torch to *${contestant.name}* (forced — their contestant was eliminated)`,
+      switch: `🔄 *${req.user.name}* switched their torch to *${contestant.name}* (-${penalty} pts, ${pointsBefore} → ${pointsAfter})`,
+    };
+    sendSlackNotification(actionLabels[action] || `🔥 *${req.user.name}* updated their torch to *${contestant.name}*`);
+
     res.json({
       contestant_id,
       contestant_name: contestant.name,
@@ -164,7 +181,7 @@ router.post('/pick', requireAuth, async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
+    console.error(`[torches] pick error for user ${req.user.email}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   } finally {
     client.release();
@@ -172,6 +189,7 @@ router.post('/pick', requireAuth, async (req, res) => {
 });
 
 router.get('/rankings', requireAuth, async (req, res) => {
+  console.log(`[torches] rankings requested by ${req.user.email}`);
   try {
     const { rows: torches } = await query(
       `SELECT t.user_id, t.contestant_id, t.points, t.needs_switch,
@@ -258,9 +276,10 @@ router.get('/rankings', requireAuth, async (req, res) => {
       return b.points - a.points;
     });
 
+    console.log(`[torches] rankings: ${rankings.length} users, top points=${rankings[0]?.points ?? 0}`);
     res.json(rankings);
   } catch (err) {
-    console.error(err);
+    console.error('[torches] rankings error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -270,25 +289,28 @@ router.post('/resolve', requireAdmin, async (req, res) => {
   if (!contestant_id || !['winner', 'runner_up', 'final_week'].includes(result)) {
     return res.status(400).json({ error: 'contestant_id and valid result (winner, runner_up, final_week) required' });
   }
+  console.log(`[torches] RESOLVE contestant_id=${contestant_id} result=${result} by ${req.user.email}`);
   try {
     await query(
       'UPDATE contestants SET torch_final_result = $1 WHERE id = $2',
       [result, contestant_id]
     );
+    console.log(`[torches] resolved contestant id=${contestant_id} as ${result}`);
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error(`[torches] resolve error contestant_id=${contestant_id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 router.post('/award', requireAdmin, async (req, res) => {
   const { contestant_id, bonus_type } = req.body;
-  const bonuses = { idol_played: 2, immunity_win: 1 };
+  const bonuses = { idol_played: 2, immunity_win: 1, sanctuary_visit: 1 };
   if (!contestant_id || !bonuses[bonus_type]) {
-    return res.status(400).json({ error: 'contestant_id and bonus_type (idol_played | immunity_win) required' });
+    return res.status(400).json({ error: 'contestant_id and bonus_type (idol_played | immunity_win | sanctuary_visit) required' });
   }
   const amount = bonuses[bonus_type];
+  console.log(`[torches] AWARD contestant_id=${contestant_id} bonus=${bonus_type} (+${amount}) by ${req.user.email}`);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -310,10 +332,11 @@ router.post('/award', requireAdmin, async (req, res) => {
     }
     await client.query('COMMIT');
     const { rows: [c] } = await query('SELECT name FROM contestants WHERE id = $1', [contestant_id]);
+    console.log(`[torches] awarded ${bonus_type} to "${c?.name}" affected ${affected.length} torches`);
     res.json({ success: true, affected: affected.length, contestant_name: c?.name, amount });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
+    console.error(`[torches] award error contestant_id=${contestant_id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   } finally {
     client.release();
@@ -325,6 +348,7 @@ router.post('/random', requireAdmin, async (req, res) => {
   if (!Array.isArray(user_ids) || user_ids.length === 0) {
     return res.status(400).json({ error: 'user_ids array is required' });
   }
+  console.log(`[torches] random assign for ${user_ids.length} users by ${req.user.email}`);
 
   try {
     const { rows: contestants } = await query(
@@ -358,6 +382,7 @@ router.post('/random', requireAdmin, async (req, res) => {
         assigned.push({ user_id: userId, contestant_name: contestant.name });
       }
       await client.query('COMMIT');
+      console.log(`[torches] random assigned ${assigned.length} torches:`, assigned.map(a => `user ${a.user_id} -> ${a.contestant_name}`).join(', '));
       res.json({ success: true, assigned });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -366,7 +391,7 @@ router.post('/random', requireAdmin, async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error(err);
+    console.error('[torches] random assign error:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -376,14 +401,16 @@ router.post('/unresolve', requireAdmin, async (req, res) => {
   if (!contestant_id) {
     return res.status(400).json({ error: 'contestant_id required' });
   }
+  console.log(`[torches] UNRESOLVE contestant_id=${contestant_id} by ${req.user.email}`);
   try {
     await query(
       'UPDATE contestants SET torch_final_result = NULL WHERE id = $1',
       [contestant_id]
     );
+    console.log(`[torches] unresolved contestant id=${contestant_id}`);
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error(`[torches] unresolve error contestant_id=${contestant_id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
