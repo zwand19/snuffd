@@ -248,7 +248,7 @@ export default function WeekDetail({ user, setAppError }) {
                     {currentPicks.length}/{q.required_answers}
                   </span>
                 )}
-                {q.resolved && <span className="badge badge-resolved">✓ Resolved</span>}
+                {!!q.resolved && <span className="badge badge-resolved">✓ Resolved</span>}
               </div>
 
               {isCollapsed ? (
@@ -277,8 +277,8 @@ export default function WeekDetail({ user, setAppError }) {
                     const isSelected = isMulti
                       ? currentPicks.includes(a.id)
                       : picks[q.id] === a.id;
-                    const isCorrect = a.is_correct;
-                    const isEliminated = a.is_eliminated;
+                    const isCorrect = !!a.is_correct;
+                    const isEliminated = !!a.is_eliminated;
                     const wasMyPick = q.my_picks?.some(p => p.answer_id === a.id);
 
                     return (

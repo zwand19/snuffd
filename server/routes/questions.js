@@ -1,5 +1,5 @@
 const { Router } = require('express');
-const { query } = require('../db');
+const { pool, query } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 
 const router = Router();
@@ -261,6 +261,94 @@ router.post('/:id/unresolve', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.post('/merge', requireAdmin, async (req, res) => {
+  const { week_id, text, source_question_ids, points, scoring_type, estimated_occurrences } = req.body;
+  if (!week_id || !text || !Array.isArray(source_question_ids) || source_question_ids.length < 2) {
+    return res.status(400).json({ error: 'week_id, text, and at least 2 source_question_ids are required' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const ph = source_question_ids.map((_, i) => `$${i + 1}`).join(',');
+    const { rows: sourceQuestions } = await client.query(
+      `SELECT id FROM questions WHERE id IN (${ph}) AND week_id = $${source_question_ids.length + 1}`,
+      [...source_question_ids, week_id]
+    );
+    if (sourceQuestions.length !== source_question_ids.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Some source questions not found in this week' });
+    }
+
+    const { rows: allAnswers } = await client.query(
+      `SELECT * FROM answers WHERE question_id IN (${ph}) ORDER BY sort_order ASC, id ASC`,
+      source_question_ids
+    );
+    const uniqueTexts = [...new Set(allAnswers.map(a => a.text))];
+
+    const { rows: [maxRow] } = await client.query(
+      'SELECT MAX(sort_order) as m FROM questions WHERE week_id = $1',
+      [week_id]
+    );
+    const nextOrder = (parseInt(maxRow?.m) || 0) + 1;
+
+    const { rows: [newQ] } = await client.query(
+      `INSERT INTO questions (week_id, text, points, sort_order, required_answers, scoring_type, estimated_occurrences)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [week_id, text, points || 1, nextOrder, source_question_ids.length, scoring_type || 'standard', estimated_occurrences || 0]
+    );
+
+    const newAnswerMap = {};
+    for (let i = 0; i < uniqueTexts.length; i++) {
+      const { rows: [a] } = await client.query(
+        'INSERT INTO answers (question_id, text, sort_order) VALUES ($1, $2, $3) RETURNING *',
+        [newQ.id, uniqueTexts[i], i]
+      );
+      newAnswerMap[uniqueTexts[i]] = a.id;
+    }
+
+    const oldAnswerTextMap = {};
+    for (const a of allAnswers) {
+      oldAnswerTextMap[a.id] = a.text;
+    }
+
+    const { rows: sourcePicks } = await client.query(
+      `SELECT * FROM picks WHERE question_id IN (${ph})`,
+      source_question_ids
+    );
+
+    const inserted = new Set();
+    for (const pick of sourcePicks) {
+      const answerText = oldAnswerTextMap[pick.answer_id];
+      const newAnswerId = newAnswerMap[answerText];
+      const key = `${pick.user_id}-${newAnswerId}`;
+      if (!newAnswerId || inserted.has(key)) {
+        continue;
+      }
+      await client.query(
+        'INSERT INTO picks (user_id, question_id, answer_id) VALUES ($1, $2, $3)',
+        [pick.user_id, newQ.id, newAnswerId]
+      );
+      inserted.add(key);
+    }
+
+    await client.query('COMMIT');
+
+    const { rows: newAnswers } = await client.query(
+      'SELECT * FROM answers WHERE question_id = $1 ORDER BY sort_order ASC',
+      [newQ.id]
+    );
+    res.json({ ...newQ, answers: newAnswers, picks_cloned: inserted.size });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
   }
 });
 

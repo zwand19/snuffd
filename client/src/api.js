@@ -86,6 +86,7 @@ export const api = {
   setAnswerCorrect: (id, correct) => request(`/api/questions/answers/${id}/correct`, { method: 'POST', body: JSON.stringify({ correct }) }),
   setAnswerOccurrences: (id, occurrences) => request(`/api/questions/answers/${id}/occurrences`, { method: 'POST', body: JSON.stringify({ occurrences }) }),
   cloneQuestion: (qId) => request(`/api/questions/${qId}/clone`, { method: 'POST' }),
+  mergeQuestions: (data) => request('/api/questions/merge', { method: 'POST', body: JSON.stringify(data) }),
   addContestantAnswers: (qId) => request(`/api/questions/${qId}/add-contestants`, { method: 'POST' }),
   resolveQuestion: (qId) => request(`/api/questions/${qId}/resolve`, { method: 'POST' }),
   unresolveQuestion: (qId) => request(`/api/questions/${qId}/unresolve`, { method: 'POST' }),

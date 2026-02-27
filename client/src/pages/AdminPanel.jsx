@@ -508,6 +508,123 @@ function QuestionEditor({ question: q, index, onAddContestants, onAddAnswer, onR
   );
 }
 
+function MergeQuestionsForm({ week, onComplete }) {
+  const [mergeText, setMergeText] = useState('');
+  const [mergePoints, setMergePoints] = useState(1);
+  const [selectedQIds, setSelectedQIds] = useState([]);
+  const [merging, setMerging] = useState(false);
+  const [mergeResult, setMergeResult] = useState(null);
+
+  function toggleQ(qId) {
+    setSelectedQIds(prev =>
+      prev.includes(qId) ? prev.filter(id => id !== qId) : [...prev, qId]
+    );
+  }
+
+  const previewAnswers = (() => {
+    const texts = new Set();
+    for (const q of week.questions) {
+      if (selectedQIds.includes(q.id)) {
+        for (const a of q.answers) {
+          texts.add(a.text);
+        }
+      }
+    }
+    return [...texts];
+  })();
+
+  async function doMerge() {
+    if (!mergeText.trim() || selectedQIds.length < 2) {
+      return;
+    }
+    setMerging(true);
+    setMergeResult(null);
+    try {
+      const result = await api.mergeQuestions({
+        week_id: week.id,
+        text: mergeText.trim(),
+        source_question_ids: selectedQIds,
+        points: mergePoints,
+      });
+      setMergeResult(`Created Q${result.id} with ${result.answers.length} answers and ${result.picks_cloned} picks cloned.`);
+      setMergeText('');
+      setSelectedQIds([]);
+      onComplete();
+    } catch (err) {
+      setMergeResult(`Error: ${err.message}`);
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ borderLeft: '3px solid var(--primary)', marginBottom: '1.5rem' }}>
+      <div className="card-header">
+        <h2>Merge Questions</h2>
+      </div>
+      <div style={{ padding: '0 1rem 1rem' }}>
+        {mergeResult && (
+          <div className={`alert ${mergeResult.startsWith('Error') ? 'alert-error' : 'alert-success'}`}>
+            {mergeResult}
+          </div>
+        )}
+        <div className="form-row">
+          <label>New question text</label>
+          <input
+            value={mergeText}
+            onChange={e => setMergeText(e.target.value)}
+            placeholder="Enter the merged question prompt"
+            className="input"
+          />
+        </div>
+        <div className="form-row">
+          <label>Points</label>
+          <input
+            type="number" value={mergePoints}
+            onChange={e => setMergePoints(parseInt(e.target.value) || 1)}
+            className="input input-sm" min="1" style={{ width: '70px' }}
+          />
+        </div>
+        <div className="form-row">
+          <label>Select questions to merge ({selectedQIds.length} selected)</label>
+          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            {week.questions.map((q, i) => (
+              <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={selectedQIds.includes(q.id)}
+                  onChange={() => toggleQ(q.id)}
+                />
+                <span>Q{i + 1}: {q.text}</span>
+                <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                  ({q.answers.length} answers)
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        {previewAnswers.length > 0 && (
+          <div className="form-row">
+            <label>Preview: {previewAnswers.length} unique answers, {selectedQIds.length} required picks</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              {previewAnswers.map(t => (
+                <span key={t} className="chip">{t}</span>
+              ))}
+            </div>
+          </div>
+        )}
+        <button
+          onClick={doMerge}
+          disabled={merging || !mergeText.trim() || selectedQIds.length < 2}
+          className="btn btn-primary"
+        >
+          {merging ? 'Merging...' : `Merge ${selectedQIds.length} Questions`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function WeekEditor({ weekId, onBack, onRefresh }) {
   const [week, setWeek] = useState(null);
   const [title, setTitle] = useState('');
@@ -519,6 +636,7 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
   const [newQEstOcc, setNewQEstOcc] = useState(0);
   const [submissionStatus, setSubmissionStatus] = useState(null);
   const [randomMsg, setRandomMsg] = useState('');
+  const [showMerge, setShowMerge] = useState(false);
 
   useEffect(() => { loadWeek(); loadStatus(); }, [weekId]);
 
@@ -675,7 +793,19 @@ function WeekEditor({ weekId, onBack, onRefresh }) {
         ) : null;
       })()}
 
-      <h3>Questions</h3>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+        <h3 style={{ margin: 0 }}>Questions</h3>
+        <button
+          onClick={() => setShowMerge(!showMerge)}
+          className={`btn btn-sm ${showMerge ? 'btn-ghost' : 'btn-secondary'}`}
+        >
+          {showMerge ? 'Hide Merge' : 'Merge Questions'}
+        </button>
+      </div>
+
+      {showMerge && (
+        <MergeQuestionsForm week={week} onComplete={loadWeek} />
+      )}
       <form onSubmit={addQuestion}>
         <div className="inline-form">
           <input
