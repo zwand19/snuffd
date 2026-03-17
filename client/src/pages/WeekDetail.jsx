@@ -30,7 +30,9 @@ export default function WeekDetail({ user, setAppError }) {
       setTorchAssignments(torches);
       const existing = {};
       for (const q of data.questions) {
-        if (q.my_picks && q.my_picks.length > 0) {
+        if (q.scoring_type === 'checklist') {
+          existing[q.id] = q.my_picks ? q.my_picks.map(p => p.answer_id) : [];
+        } else if (q.my_picks && q.my_picks.length > 0) {
           if (q.required_answers > 1) {
             existing[q.id] = q.my_picks.map(p => p.answer_id);
           } else {
@@ -52,14 +54,17 @@ export default function WeekDetail({ user, setAppError }) {
     setSubmitting(true);
     setMessage('');
     try {
+      const checklistQIds = week.questions
+        .filter(q => q.scoring_type === 'checklist')
+        .map(q => q.id);
       const pickArray = Object.entries(picks).flatMap(([question_id, answer]) => {
         const answers = Array.isArray(answer) ? answer : [answer];
-        return answers.map(answer_id => ({
+        return answers.filter(Boolean).map(answer_id => ({
           question_id: parseInt(question_id),
           answer_id: parseInt(answer_id),
         }));
       });
-      await api.submitPicks(pickArray);
+      await api.submitPicks(pickArray, checklistQIds);
       setMessage('Picks submitted!');
       setExpandedQuestions({});
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -88,6 +93,9 @@ export default function WeekDetail({ user, setAppError }) {
 
   const isLocked = week.is_locked;
   const answeredCount = week.questions.filter(q => {
+    if (q.scoring_type === 'checklist') {
+      return true;
+    }
     if (q.required_answers > 1) {
       return Array.isArray(picks[q.id]) && picks[q.id].length === q.required_answers;
     }
@@ -218,16 +226,19 @@ export default function WeekDetail({ user, setAppError }) {
 
       <form onSubmit={handleSubmit}>
         {week.questions.map((q, qi) => {
+          const isChecklist = q.scoring_type === 'checklist';
           const isMulti = q.required_answers > 1;
-          const currentPicks = isMulti
+          const currentPicks = (isMulti || isChecklist)
             ? (Array.isArray(picks[q.id]) ? picks[q.id] : [])
             : [];
-          const pickedAnswers = isMulti
+          const pickedAnswers = (isMulti || isChecklist)
             ? currentPicks.map(id => q.answers.find(a => a.id === id)).filter(Boolean)
             : (picks[q.id] ? [q.answers.find(a => a.id === picks[q.id])].filter(Boolean) : []);
-          const isFullyPicked = isMulti
-            ? pickedAnswers.length === q.required_answers
-            : pickedAnswers.length === 1;
+          const isFullyPicked = isChecklist
+            ? false
+            : isMulti
+              ? pickedAnswers.length === q.required_answers
+              : pickedAnswers.length === 1;
           const isCollapsed = !isLocked && isFullyPicked && !expandedQuestions[q.id];
 
           return (
@@ -238,14 +249,21 @@ export default function WeekDetail({ user, setAppError }) {
                 <span className="question-points">
                   {q.scoring_type === 'occurrence'
                     ? `${q.points} pt${q.points !== 1 ? 's' : ''}/occ`
-                    : isMulti
-                      ? `${q.points} pt${q.points !== 1 ? 's' : ''} each`
-                      : `${q.points} pt${q.points !== 1 ? 's' : ''}`
+                    : isChecklist
+                      ? `${q.points} pt${q.points !== 1 ? 's' : ''}/answer`
+                      : isMulti
+                        ? `${q.points} pt${q.points !== 1 ? 's' : ''} each`
+                        : `${q.points} pt${q.points !== 1 ? 's' : ''}`
                   }
                 </span>
                 {isMulti && !isLocked && (
                   <span className="badge badge-pick-count">
                     {currentPicks.length}/{q.required_answers}
+                  </span>
+                )}
+                {isChecklist && !isLocked && (
+                  <span className="badge badge-pick-count">
+                    {currentPicks.length} checked
                   </span>
                 )}
                 {!!q.resolved && <span className="badge badge-resolved">✓ Resolved</span>}
@@ -274,7 +292,7 @@ export default function WeekDetail({ user, setAppError }) {
               ) : (
                 <div className="answers-list">
                   {q.answers.map(a => {
-                    const isSelected = isMulti
+                    const isSelected = (isMulti || isChecklist)
                       ? currentPicks.includes(a.id)
                       : picks[q.id] === a.id;
                     const isCorrect = !!a.is_correct;
@@ -287,12 +305,29 @@ export default function WeekDetail({ user, setAppError }) {
                         className={[
                           'answer-option',
                           isSelected ? 'selected' : '',
-                          isCorrect ? 'correct' : '',
-                          isLocked && wasMyPick && !isCorrect && (q.resolved || isEliminated) ? 'incorrect' : '',
-                          isEliminated ? 'eliminated' : '',
-                        ].join(' ')}
+                          isChecklist && isLocked && isCorrect && wasMyPick ? 'correct' : '',
+                          isChecklist && isLocked && isCorrect && !wasMyPick ? 'incorrect' : '',
+                          isChecklist && isLocked && !isCorrect && wasMyPick ? 'incorrect' : '',
+                          isChecklist && isLocked && !isCorrect && !wasMyPick && q.resolved ? 'correct' : '',
+                          !isChecklist && isCorrect ? 'correct' : '',
+                          !isChecklist && isLocked && wasMyPick && !isCorrect && (q.resolved || isEliminated) ? 'incorrect' : '',
+                          !isChecklist && isEliminated ? 'eliminated' : '',
+                        ].filter(Boolean).join(' ')}
                       >
-                        {!isLocked && isMulti && (
+                        {!isLocked && isChecklist && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) {
+                                setPicks({ ...picks, [q.id]: currentPicks.filter(id => id !== a.id) });
+                              } else {
+                                setPicks({ ...picks, [q.id]: [...currentPicks, a.id] });
+                              }
+                            }}
+                          />
+                        )}
+                        {!isLocked && !isChecklist && isMulti && (
                           <input
                             type="checkbox"
                             checked={isSelected}
@@ -309,7 +344,7 @@ export default function WeekDetail({ user, setAppError }) {
                             }}
                           />
                         )}
-                        {!isLocked && !isMulti && (
+                        {!isLocked && !isChecklist && !isMulti && (
                           <input
                             type="radio"
                             name={`q-${q.id}`}
@@ -321,7 +356,7 @@ export default function WeekDetail({ user, setAppError }) {
                             }}
                           />
                         )}
-                        <span className={`answer-text ${isEliminated ? 'text-strikethrough text-muted' : ''}`}>{a.text}</span>
+                        <span className={`answer-text ${!isChecklist && isEliminated ? 'text-strikethrough text-muted' : ''}`}>{a.text}</span>
                         {a.points_override != null && (
                           <span className="answer-points">{a.points_override} pts</span>
                         )}
@@ -330,9 +365,11 @@ export default function WeekDetail({ user, setAppError }) {
                             ×{a.occurrences || 0}
                           </span>
                         )}
-                        {isCorrect && <span className="correct-marker">✓</span>}
-                        {isEliminated && <span className="eliminated-marker">✗</span>}
-                        {isLocked && wasMyPick && <span className="my-pick-marker">Your pick</span>}
+                        {!isChecklist && isCorrect && <span className="correct-marker">✓</span>}
+                        {!isChecklist && isEliminated && <span className="eliminated-marker">✗</span>}
+                        {isChecklist && isLocked && isCorrect && <span className="correct-marker">✓ should check</span>}
+                        {isChecklist && isLocked && isEliminated && <span className="eliminated-marker">✗ should not check</span>}
+                        {isLocked && wasMyPick && <span className="my-pick-marker">{isChecklist ? 'Checked' : 'Your pick'}</span>}
                       </label>
                     );
                   })}

@@ -6,17 +6,19 @@ const { sendSlackNotification } = require('../slack');
 const router = Router();
 
 router.post('/', requireAuth, async (req, res) => {
-  const { picks } = req.body;
-  if (!Array.isArray(picks) || picks.length === 0) {
+  const { picks, checklist_question_ids } = req.body;
+  if ((!Array.isArray(picks) || picks.length === 0) && (!Array.isArray(checklist_question_ids) || checklist_question_ids.length === 0)) {
     return res.status(400).json({ error: 'Picks array is required' });
   }
 
-  console.log(`[picks] submit ${picks.length} picks for user ${req.user.email} id=${req.user.id}`);
+  const safePicks = Array.isArray(picks) ? picks : [];
+  console.log(`[picks] submit ${safePicks.length} picks for user ${req.user.email} id=${req.user.id}`);
   try {
-    const uniqueQIds = [...new Set(picks.map(p => p.question_id))];
+    const extraQIds = Array.isArray(checklist_question_ids) ? checklist_question_ids : [];
+    const uniqueQIds = [...new Set([...safePicks.map(p => p.question_id), ...extraQIds])];
     const ph = uniqueQIds.map((_, i) => `$${i + 1}`).join(',');
     const { rows: questions } = await query(
-      `SELECT q.id, q.required_answers, w.lock_time FROM questions q
+      `SELECT q.id, q.required_answers, q.scoring_type, w.lock_time FROM questions q
        JOIN weeks w ON q.week_id = w.id
        WHERE q.id IN (${ph})`,
       uniqueQIds
@@ -34,17 +36,22 @@ router.post('/', requireAuth, async (req, res) => {
     }
 
     const reqMap = {};
+    const scoringMap = {};
     for (const q of questions) {
       reqMap[q.id] = q.required_answers || 1;
+      scoringMap[q.id] = q.scoring_type || 'standard';
     }
     const picksByQ = {};
-    for (const p of picks) {
+    for (const p of safePicks) {
       if (!picksByQ[p.question_id]) {
         picksByQ[p.question_id] = [];
       }
       picksByQ[p.question_id].push(p);
     }
     for (const [qId, qPicks] of Object.entries(picksByQ)) {
+      if (scoringMap[parseInt(qId)] === 'checklist') {
+        continue;
+      }
       const required = reqMap[parseInt(qId)];
       if (qPicks.length !== required) {
         return res.status(400).json({
@@ -67,7 +74,7 @@ router.post('/', requireAuth, async (req, res) => {
         `DELETE FROM picks WHERE user_id = $1 AND question_id IN (${delPh})`,
         [req.user.id, ...uniqueQIds]
       );
-      for (const pick of picks) {
+      for (const pick of safePicks) {
         await client.query(
           'INSERT INTO picks (user_id, question_id, answer_id) VALUES ($1, $2, $3)',
           [req.user.id, pick.question_id, pick.answer_id]
@@ -81,7 +88,7 @@ router.post('/', requireAuth, async (req, res) => {
       client.release();
     }
 
-    console.log(`[picks] saved ${picks.length} picks for user ${req.user.email} across ${uniqueQIds.length} question(s)`);
+    console.log(`[picks] saved ${safePicks.length} picks for user ${req.user.email} across ${uniqueQIds.length} question(s)`);
     const action = isEdit ? 'edited their poll picks' : 'submitted poll picks';
     sendSlackNotification(`📊 *${req.user.name}* ${action} (${uniqueQIds.length} question${uniqueQIds.length !== 1 ? 's' : ''})`);
     res.json({ success: true });
@@ -133,14 +140,17 @@ router.get('/rankings', requireAuth, async (req, res) => {
       questionMap[q.id] = q;
     }
 
+    const checklistQIds = startedQuestions.filter(q => q.scoring_type === 'checklist').map(q => q.id);
+
     const rankings = users.map(user => {
       let score = 0;
       let potentialScore = 0;
       const userPicks = (picksByUser[user.id] || []).filter(p => startedQIds.has(p.question_id));
+      const userPickSet = new Set(userPicks.map(p => `${p.question_id}-${p.answer_id}`));
 
       for (const pick of userPicks) {
         const q = questionMap[pick.question_id];
-        if (!q) {
+        if (!q || q.scoring_type === 'checklist') {
           continue;
         }
         const pickedAnswer = answerMap[pick.answer_id];
@@ -163,6 +173,35 @@ router.get('/rankings', requireAuth, async (req, res) => {
           } else if (q.resolved || pickedAnswer?.is_eliminated) {
             // resolved wrong or eliminated — no points
           } else {
+            potentialScore += basePoints;
+          }
+        }
+      }
+
+      for (const qId of checklistQIds) {
+        const q = questionMap[qId];
+        const answers = answersByQuestion[qId] || [];
+        for (const a of answers) {
+          const checked = userPickSet.has(`${qId}-${a.id}`);
+          const basePoints = a.points_override ?? q.points;
+          if (checked && a.is_correct) {
+            score += basePoints;
+            potentialScore += basePoints;
+          } else if (checked && (a.is_eliminated || q.resolved)) {
+            // checked wrong — no points
+          } else if (checked) {
+            potentialScore += basePoints;
+          } else if (!checked && a.is_correct) {
+            // didn't check a correct answer — potential lost
+          } else if (!checked && q.resolved) {
+            // question closed, unchecked + not correct = match
+            score += basePoints;
+            potentialScore += basePoints;
+          } else if (!checked && a.is_eliminated) {
+            // unchecked + eliminated = deferred match, points when closed
+            potentialScore += basePoints;
+          } else {
+            // unchecked + unmarked — might be a match when closed
             potentialScore += basePoints;
           }
         }
@@ -232,7 +271,7 @@ router.post('/random/:weekId', requireAdmin, async (req, res) => {
 
   try {
     const { rows: questions } = await query(
-      'SELECT id, required_answers FROM questions WHERE week_id = $1',
+      'SELECT id, required_answers, scoring_type FROM questions WHERE week_id = $1',
       [weekId]
     );
     if (questions.length === 0) {
@@ -244,10 +283,19 @@ router.post('/random/:weekId', requireAdmin, async (req, res) => {
       await client.query('BEGIN');
       for (const userId of user_ids) {
         for (const q of questions) {
-          const { rows: answers } = await client.query(
-            'SELECT id FROM answers WHERE question_id = $1 ORDER BY RANDOM() LIMIT $2',
-            [q.id, q.required_answers || 1]
-          );
+          let answers;
+          if (q.scoring_type === 'checklist') {
+            const { rows: allAnswers } = await client.query(
+              'SELECT id FROM answers WHERE question_id = $1', [q.id]
+            );
+            answers = allAnswers.filter(() => Math.random() > 0.5);
+          } else {
+            const { rows: picked } = await client.query(
+              'SELECT id FROM answers WHERE question_id = $1 ORDER BY RANDOM() LIMIT $2',
+              [q.id, q.required_answers || 1]
+            );
+            answers = picked;
+          }
           await client.query(
             'DELETE FROM picks WHERE user_id = $1 AND question_id = $2',
             [userId, q.id]

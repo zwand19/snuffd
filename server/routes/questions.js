@@ -83,15 +83,19 @@ router.delete('/answers/:id', requireAdmin, async (req, res) => {
 });
 
 router.post('/', requireAdmin, async (req, res) => {
-  const { week_id, text, points, sort_order, required_answers, scoring_type, estimated_occurrences } = req.body;
+  const { week_id, text, points, required_answers, scoring_type, estimated_occurrences } = req.body;
   if (!week_id || !text) {
     return res.status(400).json({ error: 'week_id and text are required' });
   }
   console.log(`[questions] create week_id=${week_id} text="${text}" points=${points || 1} by ${req.user.email}`);
   try {
+    const { rows: [maxRow] } = await query(
+      'SELECT MAX(sort_order) as m FROM questions WHERE week_id = $1', [week_id]
+    );
+    const nextOrder = (parseInt(maxRow?.m) || 0) + 1;
     const { rows } = await query(
       'INSERT INTO questions (week_id, text, points, sort_order, required_answers, scoring_type, estimated_occurrences) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [week_id, text, points || 1, sort_order || 0, required_answers || 1, scoring_type || 'standard', estimated_occurrences || 0]
+      [week_id, text, points || 1, nextOrder, required_answers || 1, scoring_type || 'standard', estimated_occurrences || 0]
     );
     console.log(`[questions] created id=${rows[0].id}`);
     res.json(rows[0]);
@@ -278,93 +282,38 @@ router.post('/:id/unresolve', requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/merge', requireAdmin, async (req, res) => {
-  const { week_id, text, source_question_ids, points, scoring_type, estimated_occurrences } = req.body;
-  if (!week_id || !text || !Array.isArray(source_question_ids) || source_question_ids.length < 2) {
-    return res.status(400).json({ error: 'week_id, text, and at least 2 source_question_ids are required' });
+router.post('/:id/move', requireAdmin, async (req, res) => {
+  const { direction } = req.body;
+  if (direction !== 'up' && direction !== 'down') {
+    return res.status(400).json({ error: 'direction must be "up" or "down"' });
   }
-  console.log(`[questions] MERGE week_id=${week_id} sources=[${source_question_ids.join(',')}] by ${req.user.email}`);
-
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-
-    const ph = source_question_ids.map((_, i) => `$${i + 1}`).join(',');
-    const { rows: sourceQuestions } = await client.query(
-      `SELECT id FROM questions WHERE id IN (${ph}) AND week_id = $${source_question_ids.length + 1}`,
-      [...source_question_ids, week_id]
-    );
-    if (sourceQuestions.length !== source_question_ids.length) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Some source questions not found in this week' });
+    const { rows: [question] } = await query('SELECT * FROM questions WHERE id = $1', [req.params.id]);
+    if (!question) {
+      return res.status(404).json({ error: 'Question not found' });
     }
-
-    const { rows: allAnswers } = await client.query(
-      `SELECT * FROM answers WHERE question_id IN (${ph}) ORDER BY sort_order ASC, id ASC`,
-      source_question_ids
+    const { rows: siblings } = await query(
+      'SELECT id, sort_order FROM questions WHERE week_id = $1 ORDER BY sort_order ASC, id ASC',
+      [question.week_id]
     );
-    const uniqueTexts = [...new Set(allAnswers.map(a => a.text))];
-
-    const { rows: [maxRow] } = await client.query(
-      'SELECT MAX(sort_order) as m FROM questions WHERE week_id = $1',
-      [week_id]
-    );
-    const nextOrder = (parseInt(maxRow?.m) || 0) + 1;
-
-    const { rows: [newQ] } = await client.query(
-      `INSERT INTO questions (week_id, text, points, sort_order, required_answers, scoring_type, estimated_occurrences)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [week_id, text, points || 1, nextOrder, source_question_ids.length, scoring_type || 'standard', estimated_occurrences || 0]
-    );
-
-    const newAnswerMap = {};
-    for (let i = 0; i < uniqueTexts.length; i++) {
-      const { rows: [a] } = await client.query(
-        'INSERT INTO answers (question_id, text, sort_order) VALUES ($1, $2, $3) RETURNING *',
-        [newQ.id, uniqueTexts[i], i]
-      );
-      newAnswerMap[uniqueTexts[i]] = a.id;
+    const idx = siblings.findIndex(q => q.id === question.id);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= siblings.length) {
+      return res.json({ success: true });
     }
-
-    const oldAnswerTextMap = {};
-    for (const a of allAnswers) {
-      oldAnswerTextMap[a.id] = a.text;
-    }
-
-    const { rows: sourcePicks } = await client.query(
-      `SELECT * FROM picks WHERE question_id IN (${ph})`,
-      source_question_ids
-    );
-
-    const inserted = new Set();
-    for (const pick of sourcePicks) {
-      const answerText = oldAnswerTextMap[pick.answer_id];
-      const newAnswerId = newAnswerMap[answerText];
-      const key = `${pick.user_id}-${newAnswerId}`;
-      if (!newAnswerId || inserted.has(key)) {
-        continue;
+    // Normalize sort_orders to guarantee distinct values before swapping
+    for (let i = 0; i < siblings.length; i++) {
+      if (siblings[i].sort_order !== i) {
+        await query('UPDATE questions SET sort_order = $1 WHERE id = $2', [i, siblings[i].id]);
+        siblings[i].sort_order = i;
       }
-      await client.query(
-        'INSERT INTO picks (user_id, question_id, answer_id) VALUES ($1, $2, $3)',
-        [pick.user_id, newQ.id, newAnswerId]
-      );
-      inserted.add(key);
     }
-
-    await client.query('COMMIT');
-
-    const { rows: newAnswers } = await client.query(
-      'SELECT * FROM answers WHERE question_id = $1 ORDER BY sort_order ASC',
-      [newQ.id]
-    );
-    console.log(`[questions] merged -> new id=${newQ.id} answers=${newAnswers.length} picks_cloned=${inserted.size}`);
-    res.json({ ...newQ, answers: newAnswers, picks_cloned: inserted.size });
+    await query('UPDATE questions SET sort_order = $1 WHERE id = $2', [swapIdx, siblings[idx].id]);
+    await query('UPDATE questions SET sort_order = $1 WHERE id = $2', [idx, siblings[swapIdx].id]);
+    res.json({ success: true });
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('[questions] merge error:', err.message);
+    console.error(`[questions] move error id=${req.params.id}:`, err.message);
     res.status(500).json({ error: 'Server error' });
-  } finally {
-    client.release();
   }
 });
 
