@@ -63,6 +63,7 @@ export const api = {
   getUsers: () => request('/api/users'),
   updateUser: (id, data) => request(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteUser: (id) => request(`/api/users/${id}`, { method: 'DELETE' }),
+  mergeUser: (targetId, sourceId) => request(`/api/users/${targetId}/merge`, { method: 'POST', body: JSON.stringify({ source_user_id: sourceId }) }),
   emailUsers: (data) => request('/api/users/email', { method: 'POST', body: JSON.stringify(data) }),
 
   getWeeks: () => request('/api/weeks'),

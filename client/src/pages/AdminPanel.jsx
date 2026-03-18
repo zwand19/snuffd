@@ -197,6 +197,9 @@ function UsersTab({ users, torchRankings, onRefresh }) {
   const [editName, setEditName] = useState('');
   const [torchMsg, setTorchMsg] = useState('');
   const [showEmail, setShowEmail] = useState(false);
+  const [merging, setMerging] = useState(null);
+  const [mergeTarget, setMergeTarget] = useState('');
+  const [mergeMsg, setMergeMsg] = useState('');
 
   function startEdit(u) {
     setEditing(u.id);
@@ -207,6 +210,19 @@ function UsersTab({ users, torchRankings, onRefresh }) {
     await api.updateUser(id, { name: editName });
     setEditing(null);
     onRefresh();
+  }
+
+  async function mergeUser(sourceId, targetId) {
+    setMergeMsg('');
+    try {
+      const result = await api.mergeUser(targetId, sourceId);
+      setMergeMsg(`Merged ${result.source_name} → ${result.target_name}: ${result.picks_transferred} picks, torch ${result.torch_transferred ? 'transferred' : 'kept target\'s'}, ${result.history_transferred} history entries`);
+      setMerging(null);
+      setMergeTarget('');
+      onRefresh();
+    } catch (err) {
+      setMergeMsg(err.message);
+    }
   }
 
   async function deleteUser(u) {
@@ -277,6 +293,12 @@ function UsersTab({ users, torchRankings, onRefresh }) {
         </div>
       )}
 
+    {mergeMsg && (
+      <div className={`alert ${mergeMsg.includes('Merged') ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: '1rem' }}>
+        {mergeMsg}
+      </div>
+    )}
+
     <div className="users-list">
       {users.map(u => (
         <div key={u.id} className="user-item">
@@ -292,12 +314,46 @@ function UsersTab({ users, torchRankings, onRefresh }) {
               <button onClick={() => saveName(u.id)} className="btn btn-sm btn-primary">Save</button>
               <button onClick={() => setEditing(null)} className="btn btn-sm">Cancel</button>
             </div>
+          ) : merging === u.id ? (
+            <div className="inline-form" style={{ marginBottom: 0 }}>
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Merge into:</span>
+              <select
+                value={mergeTarget}
+                onChange={e => setMergeTarget(e.target.value)}
+                className="input input-sm"
+                style={{ width: 'auto' }}
+              >
+                <option value="">Select user...</option>
+                {users.filter(other => other.id !== u.id).map(other => (
+                  <option key={other.id} value={other.id}>{other.name} ({other.email})</option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  if (!mergeTarget) {
+                    return;
+                  }
+                  if (!confirm(`Merge all data from ${u.name} into the selected user and delete ${u.name}?`)) {
+                    return;
+                  }
+                  mergeUser(u.id, parseInt(mergeTarget));
+                }}
+                disabled={!mergeTarget}
+                className="btn btn-sm btn-warning"
+              >
+                Merge
+              </button>
+              <button onClick={() => { setMerging(null); setMergeTarget(''); }} className="btn btn-sm">Cancel</button>
+            </div>
           ) : (
             <div className="user-name-row">
               <span>{u.name}</span>
               <button onClick={() => startEdit(u)} className="btn btn-sm">Edit</button>
               {!u.is_admin && (
-                <button onClick={() => deleteUser(u)} className="btn btn-sm btn-danger">Delete</button>
+                <>
+                  <button onClick={() => { setMerging(u.id); setMergeTarget(''); setMergeMsg(''); }} className="btn btn-sm btn-secondary">Merge</button>
+                  <button onClick={() => deleteUser(u)} className="btn btn-sm btn-danger">Delete</button>
+                </>
               )}
             </div>
           )}

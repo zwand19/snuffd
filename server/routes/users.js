@@ -44,6 +44,69 @@ router.put('/:id', requireAdmin, async (req, res) => {
   }
 });
 
+router.post('/:id/merge', requireAdmin, async (req, res) => {
+  const targetId = parseInt(req.params.id);
+  const sourceId = parseInt(req.body.source_user_id);
+  if (!sourceId || sourceId === targetId) {
+    return res.status(400).json({ error: 'Invalid source user' });
+  }
+  console.log(`[users] MERGE source=${sourceId} -> target=${targetId} by ${req.user.email}`);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [source] } = await client.query('SELECT id, name FROM users WHERE id = $1', [sourceId]);
+    const { rows: [target] } = await client.query('SELECT id, name FROM users WHERE id = $1', [targetId]);
+    if (!source || !target) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Transfer picks that don't conflict with target's existing picks
+    const { rowCount: picksTransferred } = await client.query(`
+      UPDATE picks SET user_id = $1
+      WHERE user_id = $2
+        AND NOT EXISTS (
+          SELECT 1 FROM picks p2
+          WHERE p2.user_id = $1 AND p2.question_id = picks.question_id AND p2.answer_id = picks.answer_id
+        )
+    `, [targetId, sourceId]);
+    await client.query('DELETE FROM picks WHERE user_id = $1', [sourceId]);
+
+    // Transfer torch if target doesn't have one
+    const { rows: targetTorch } = await client.query('SELECT id FROM torches WHERE user_id = $1', [targetId]);
+    let torchTransferred = false;
+    if (targetTorch.length === 0) {
+      const { rowCount } = await client.query('UPDATE torches SET user_id = $1 WHERE user_id = $2', [targetId, sourceId]);
+      torchTransferred = rowCount > 0;
+    } else {
+      await client.query('DELETE FROM torches WHERE user_id = $1', [sourceId]);
+    }
+
+    const { rowCount: historyTransferred } = await client.query(
+      'UPDATE torch_history SET user_id = $1 WHERE user_id = $2', [targetId, sourceId]
+    );
+
+    await client.query('DELETE FROM users WHERE id = $1', [sourceId]);
+    await client.query('COMMIT');
+
+    console.log(`[users] merged: picks=${picksTransferred} torch=${torchTransferred} history=${historyTransferred}, deleted source user ${sourceId}`);
+    res.json({
+      success: true,
+      source_name: source.name,
+      target_name: target.name,
+      picks_transferred: picksTransferred,
+      torch_transferred: torchTransferred,
+      history_transferred: historyTransferred,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(`[users] merge error:`, err.message);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
 router.delete('/:id', requireAdmin, async (req, res) => {
   const userId = req.params.id;
   if (parseInt(userId) === req.user.id) {
