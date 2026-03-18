@@ -49,7 +49,7 @@ export default function App() {
           {dbUser?.is_admin ? <Link to="/admin">Admin</Link> : null}
           {isAuthenticated ? (
             <button
-              onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+              onClick={() => logout({ logoutParams: { returnTo: window.location.origin + (window.location.pathname.includes('/snuffd') ? '/snuffd' : '') } })}
               className="btn btn-sm"
             >
               Logout
