@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { pool, query } = require('../db');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireLeague } = require('../middleware/auth');
 const { sendSlackNotification } = require('../slack');
 
 const router = Router();
@@ -14,6 +14,7 @@ router.get('/', requireAuth, async (req, res) => {
        FROM torches t
        JOIN users u ON t.user_id = u.id
        LEFT JOIN contestants c ON t.contestant_id = c.id
+       WHERE u.in_league = 1
        ORDER BY t.points DESC`
     );
     console.log(`[torches] list: ${torches.length} entries`);
@@ -48,7 +49,9 @@ router.get('/week/:weekId', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Week not found' });
     }
 
-    const { rows: users } = await query('SELECT id, name FROM users ORDER BY name');
+    const { rows: users } = await query(
+      'SELECT id, name FROM users WHERE in_league = 1 ORDER BY name'
+    );
     const assignments = [];
 
     for (const user of users) {
@@ -77,7 +80,7 @@ router.get('/week/:weekId', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/pick', requireAuth, async (req, res) => {
+router.post('/pick', requireAuth, requireLeague, async (req, res) => {
   const { contestant_id } = req.body;
   if (!contestant_id) {
     return res.status(400).json({ error: 'contestant_id is required' });
@@ -198,6 +201,7 @@ router.get('/rankings', requireAuth, async (req, res) => {
        FROM torches t
        JOIN users u ON t.user_id = u.id
        LEFT JOIN contestants c ON t.contestant_id = c.id
+       WHERE u.in_league = 1
        ORDER BY t.points DESC`
     );
 

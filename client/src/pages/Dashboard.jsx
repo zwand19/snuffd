@@ -20,7 +20,7 @@ export default function Dashboard({ user, setAppError }) {
       return;
     }
     loadData();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.id, user?.in_league]);
 
   async function loadData() {
     try {
@@ -92,12 +92,20 @@ export default function Dashboard({ user, setAppError }) {
     .filter(w => new Date(w.lock_time) <= new Date())
     .sort((a, b) => b.week_number - a.week_number);
 
+  const inLeague = !!user?.in_league;
+
   return (
     <div className="dashboard">
       <div className="banner">
         <h1>🔥 SNUFFD 🔥</h1>
         <p>Survivor Fantasy League</p>
       </div>
+
+      {user && !inLeague && (
+        <div className="app-banner app-banner-warning" style={{ marginBottom: '1rem' }}>
+          <span>View-only: you are not in the league yet. An admin can add you when you are ready to play.</span>
+        </div>
+      )}
 
       {upcomingWeek && (
         <div className="card upcoming-card">
@@ -110,9 +118,15 @@ export default function Dashboard({ user, setAppError }) {
               })}
             </span>
           </div>
-          <Link to={`/weeks/${upcomingWeek.id}`} className="btn btn-primary">
-            Submit Your Picks
-          </Link>
+          {inLeague ? (
+            <Link to={`/weeks/${upcomingWeek.id}`} className="btn btn-primary">
+              Submit Your Picks
+            </Link>
+          ) : (
+            <Link to={`/weeks/${upcomingWeek.id}`} className="btn btn-secondary">
+              View Poll (read-only)
+            </Link>
+          )}
           {submissionStatus && (
             <div className="submission-tracker">
               <div className="submitted">
@@ -161,7 +175,18 @@ export default function Dashboard({ user, setAppError }) {
                   <td className="rank-cell">{i + 1}</td>
                   <td>{r.name}</td>
                   <td className="score-cell">{r.score}</td>
-                  <td className="potential-cell">{r.potentialScore}</td>
+                  <td className="potential-cell">
+                    <span className="potential-tooltip-wrap">
+                      {r.potentialScore}
+                      <span className="potential-tooltip" role="tooltip">
+                        <span className="potential-tooltip-line">Poll potential: {r.pollPotential}</span>
+                        <span className="potential-tooltip-line">Torch score: {r.torchScore}</span>
+                        <span className="potential-tooltip-note">
+                          Torch streak bonus and other torch bonuses are not included in this potential.
+                        </span>
+                      </span>
+                    </span>
+                  </td>
                 </tr>
               ))}
               {rankings.length === 0 && (
@@ -175,7 +200,7 @@ export default function Dashboard({ user, setAppError }) {
       <div className="card">
         <div className="card-header">
           <h2>🔦 Torch Standings</h2>
-          {!myTorch ? (
+          {inLeague && (!myTorch ? (
             <button onClick={() => setShowTorchPicker(true)} className="btn btn-primary btn-sm">
               Light Your Torch
             </button>
@@ -183,7 +208,7 @@ export default function Dashboard({ user, setAppError }) {
             <button onClick={() => setShowTorchPicker(!showTorchPicker)} className="btn btn-sm">
               {showTorchPicker ? 'Cancel' : 'Switch Torch'}
             </button>
-          )}
+          ))}
         </div>
 
         <details className="torch-info">
@@ -246,7 +271,7 @@ export default function Dashboard({ user, setAppError }) {
           </div>
         )}
 
-        {showTorchPicker && (
+        {inLeague && showTorchPicker && (
           <div className="torch-picker">
             <h4>Pick a contestant to carry your torch</h4>
             {!myTorch && <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Your torch starts at 35 points. You can voluntarily switch for a penalty later, or be penalized & forced to re-pick if your torch is snuffed.</p>}

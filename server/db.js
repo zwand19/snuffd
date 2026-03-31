@@ -111,6 +111,11 @@ async function initDb() {
         ALTER TABLE picks ADD CONSTRAINT picks_user_id_question_id_answer_id_key UNIQUE(user_id, question_id, answer_id);
       END IF;
     END $$;
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS in_league INTEGER;
+    UPDATE users SET in_league = 1 WHERE in_league IS NULL;
+    ALTER TABLE users ALTER COLUMN in_league SET DEFAULT 0;
+    ALTER TABLE users ALTER COLUMN in_league SET NOT NULL;
   `);
 }
 

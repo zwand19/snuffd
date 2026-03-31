@@ -42,6 +42,14 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireLeague(req, res, next) {
+  if (!req.user?.in_league) {
+    console.warn(`[auth] Non-league user ${req.user?.email} attempted ${req.method} ${req.path}`);
+    return res.status(403).json({ error: 'Not in league (view only)' });
+  }
+  next();
+}
+
 async function syncUser(req, res) {
   const sub = req.auth?.payload?.sub;
   const { email, name } = req.body;
@@ -57,8 +65,8 @@ async function syncUser(req, res) {
       const displayName = name || email.split('@')[0];
       console.log(`[auth] New user registering: ${displayName} (${email}) admin=${isAdmin}`);
       const inserted = await query(
-        'INSERT INTO users (auth0_id, email, name, is_admin) VALUES ($1, $2, $3, $4) RETURNING *',
-        [sub, email.toLowerCase(), displayName, isAdmin]
+        'INSERT INTO users (auth0_id, email, name, is_admin, in_league) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [sub, email.toLowerCase(), displayName, isAdmin, isAdmin ? 1 : 0]
       );
       user = inserted.rows[0];
       console.log(`[auth] Created user id=${user.id} email=${email}`);
@@ -73,4 +81,4 @@ async function syncUser(req, res) {
   }
 }
 
-module.exports = { jwtCheck, loadUser, requireAuth, requireAdmin, syncUser };
+module.exports = { jwtCheck, loadUser, requireAuth, requireAdmin, requireLeague, syncUser };

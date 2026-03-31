@@ -1,11 +1,11 @@
 const { Router } = require('express');
 const { pool, query } = require('../db');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireLeague } = require('../middleware/auth');
 const { sendSlackNotification } = require('../slack');
 
 const router = Router();
 
-router.post('/', requireAuth, async (req, res) => {
+router.post('/', requireAuth, requireLeague, async (req, res) => {
   const { picks, checklist_question_ids } = req.body;
   if ((!Array.isArray(picks) || picks.length === 0) && (!Array.isArray(checklist_question_ids) || checklist_question_ids.length === 0)) {
     return res.status(400).json({ error: 'Picks array is required' });
@@ -98,11 +98,15 @@ router.post('/', requireAuth, async (req, res) => {
   }
 });
 
+const TORCH_BONUS_ACTIONS = ['idol_played', 'immunity_win', 'sanctuary_visit'];
+
 router.get('/rankings', requireAuth, async (req, res) => {
   console.log(`[picks] rankings requested by ${req.user.email}`);
   try {
     const now = new Date().toISOString();
-    const { rows: users } = await query('SELECT id, name FROM users ORDER BY name');
+    const { rows: users } = await query(
+      'SELECT id, name FROM users WHERE in_league = 1 ORDER BY name'
+    );
     const { rows: startedQuestions } = await query(
       `SELECT q.id, q.points, q.resolved, q.scoring_type, q.estimated_occurrences
        FROM questions q JOIN weeks w ON q.week_id = w.id
@@ -115,6 +119,23 @@ router.get('/rankings', requireAuth, async (req, res) => {
     const { rows: allPicks } = await query(
       'SELECT user_id, question_id, answer_id FROM picks'
     );
+
+    const { rows: torchRows } = await query('SELECT user_id, points FROM torches');
+    const torchByUser = {};
+    for (const t of torchRows) {
+      torchByUser[t.user_id] = t.points;
+    }
+
+    const bonusPh = TORCH_BONUS_ACTIONS.map((_, i) => `$${i + 1}`).join(',');
+    const { rows: bonusRows } = await query(
+      `SELECT user_id, COALESCE(SUM(points_after - points_before), 0)::int AS bonus_pts
+       FROM torch_history WHERE action IN (${bonusPh}) GROUP BY user_id`,
+      TORCH_BONUS_ACTIONS
+    );
+    const bonusByUser = {};
+    for (const b of bonusRows) {
+      bonusByUser[b.user_id] = b.bonus_pts;
+    }
 
     const answerMap = {};
     const answersByQuestion = {};
@@ -144,7 +165,7 @@ router.get('/rankings', requireAuth, async (req, res) => {
 
     const rankings = users.map(user => {
       let score = 0;
-      let potentialScore = 0;
+      let pollPotential = 0;
       const userPicks = (picksByUser[user.id] || []).filter(p => startedQIds.has(p.question_id));
       const userPickSet = new Set(userPicks.map(p => `${p.question_id}-${p.answer_id}`));
 
@@ -159,21 +180,21 @@ router.get('/rankings', requireAuth, async (req, res) => {
         if (q.scoring_type === 'occurrence') {
           const earned = basePoints * (pickedAnswer?.occurrences || 0);
           score += earned;
-          potentialScore += earned;
+          pollPotential += earned;
           if (!q.resolved) {
             const totalOcc = (answersByQuestion[q.id] || [])
               .reduce((sum, a) => sum + (a.occurrences || 0), 0);
             const remaining = Math.max(0, (q.estimated_occurrences || 0) - totalOcc);
-            potentialScore += remaining * basePoints;
+            pollPotential += remaining * basePoints;
           }
         } else {
           if (pickedAnswer?.is_correct) {
             score += basePoints;
-            potentialScore += basePoints;
+            pollPotential += basePoints;
           } else if (q.resolved || pickedAnswer?.is_eliminated) {
             // resolved wrong or eliminated — no points
           } else {
-            potentialScore += basePoints;
+            pollPotential += basePoints;
           }
         }
       }
@@ -186,28 +207,41 @@ router.get('/rankings', requireAuth, async (req, res) => {
           const basePoints = a.points_override ?? q.points;
           if (checked && a.is_correct) {
             score += basePoints;
-            potentialScore += basePoints;
+            pollPotential += basePoints;
           } else if (checked && (a.is_eliminated || q.resolved)) {
             // checked wrong — no points
           } else if (checked) {
-            potentialScore += basePoints;
+            pollPotential += basePoints;
           } else if (!checked && a.is_correct) {
             // didn't check a correct answer — potential lost
           } else if (!checked && q.resolved) {
             // question closed, unchecked + not correct = match
             score += basePoints;
-            potentialScore += basePoints;
+            pollPotential += basePoints;
           } else if (!checked && a.is_eliminated) {
             // unchecked + eliminated = deferred match, points when closed
-            potentialScore += basePoints;
+            pollPotential += basePoints;
           } else {
             // unchecked + unmarked — might be a match when closed
-            potentialScore += basePoints;
+            pollPotential += basePoints;
           }
         }
       }
 
-      return { id: user.id, name: user.name, score, potentialScore };
+      const rawTorch = torchByUser[user.id];
+      const bonus = bonusByUser[user.id] || 0;
+      const torchScore =
+        rawTorch === undefined ? 0 : Math.max(0, rawTorch - bonus);
+      const potentialScore = pollPotential + torchScore;
+
+      return {
+        id: user.id,
+        name: user.name,
+        score,
+        pollPotential,
+        torchScore,
+        potentialScore,
+      };
     });
 
     rankings.sort((a, b) => b.score - a.score || b.potentialScore - a.potentialScore);
@@ -223,7 +257,9 @@ router.get('/status/:weekId', requireAuth, async (req, res) => {
   const weekId = req.params.weekId;
   console.log(`[picks] status for week id=${weekId} requested by ${req.user.email}`);
   try {
-    const { rows: users } = await query('SELECT id, name FROM users ORDER BY name');
+    const { rows: users } = await query(
+      'SELECT id, name FROM users WHERE in_league = 1 ORDER BY name'
+    );
     const { rows: [countRow] } = await query(
       'SELECT COUNT(*) as count FROM questions WHERE week_id = $1',
       [weekId]

@@ -15,7 +15,7 @@ router.get('/', requireAdmin, async (req, res) => {
   console.log(`[users] list all users requested by ${req.user.email}`);
   try {
     const { rows } = await query(
-      'SELECT id, email, name, is_admin, created_at FROM users ORDER BY name'
+      'SELECT id, email, name, is_admin, in_league, created_at FROM users ORDER BY name'
     );
     console.log(`[users] returning ${rows.length} users`);
     res.json(rows);
@@ -26,15 +26,30 @@ router.get('/', requireAdmin, async (req, res) => {
 });
 
 router.put('/:id', requireAdmin, async (req, res) => {
-  const { name } = req.body;
-  if (!name) {
-    return res.status(400).json({ error: 'Name is required' });
+  const { name, in_league } = req.body;
+  if (name == null && in_league === undefined) {
+    return res.status(400).json({ error: 'name and/or in_league required' });
   }
-  console.log(`[users] update id=${req.params.id} name="${name}" by ${req.user.email}`);
+  const sets = [];
+  const vals = [];
+  let i = 1;
+  if (name != null) {
+    if (!String(name).trim()) {
+      return res.status(400).json({ error: 'Name cannot be empty' });
+    }
+    sets.push(`name = $${i++}`);
+    vals.push(name);
+  }
+  if (in_league !== undefined) {
+    sets.push(`in_league = $${i++}`);
+    vals.push(in_league ? 1 : 0);
+  }
+  vals.push(req.params.id);
+  console.log(`[users] update id=${req.params.id} by ${req.user.email} fields=${sets.join(', ')}`);
   try {
     const { rows } = await query(
-      'UPDATE users SET name = $1 WHERE id = $2 RETURNING id, email, name, is_admin, created_at',
-      [name, req.params.id]
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${i} RETURNING id, email, name, is_admin, in_league, created_at`,
+      vals
     );
     console.log(`[users] updated user id=${req.params.id}`);
     res.json(rows[0]);

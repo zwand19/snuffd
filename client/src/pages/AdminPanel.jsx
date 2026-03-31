@@ -237,7 +237,18 @@ function UsersTab({ users, torchRankings, onRefresh }) {
     }
   }
 
-  const noTorchUsers = users.filter(u => !torchRankings.some(t => t.user_id === u.id));
+  const noTorchUsers = users.filter(
+    u => u.in_league && !torchRankings.some(t => t.user_id === u.id)
+  );
+
+  async function toggleLeague(u) {
+    try {
+      await api.updateUser(u.id, { in_league: u.in_league ? 0 : 1 });
+      onRefresh();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
 
   async function assignRandomTorches(userIds) {
     setTorchMsg('');
@@ -348,6 +359,16 @@ function UsersTab({ users, torchRankings, onRefresh }) {
           ) : (
             <div className="user-name-row">
               <span>{u.name}</span>
+              <span className={`chip ${u.in_league ? 'chip-success' : 'chip-warning'}`} style={{ fontSize: '0.75rem' }}>
+                {u.in_league ? 'League' : 'View only'}
+              </span>
+              <button
+                type="button"
+                onClick={() => toggleLeague(u)}
+                className="btn btn-sm btn-secondary"
+              >
+                {u.in_league ? 'Remove from league' : 'Add to league'}
+              </button>
               <button onClick={() => startEdit(u)} className="btn btn-sm">Edit</button>
               {!u.is_admin && (
                 <>

@@ -51,6 +51,9 @@ export default function WeekDetail({ user, setAppError }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (!user?.in_league) {
+      return;
+    }
     setSubmitting(true);
     setMessage('');
     try {
@@ -92,6 +95,7 @@ export default function WeekDetail({ user, setAppError }) {
   }
 
   const isLocked = week.is_locked;
+  const canPick = !!user?.in_league && !isLocked;
   const answeredCount = week.questions.filter(q => {
     if (q.scoring_type === 'checklist') {
       return true;
@@ -123,6 +127,12 @@ export default function WeekDetail({ user, setAppError }) {
         </div>
       </div>
 
+      {user && !user.in_league && (
+        <div className="app-banner app-banner-warning" style={{ marginBottom: '1rem' }}>
+          <span>View-only: you are not in the league yet, so you cannot submit picks or manage a torch.</span>
+        </div>
+      )}
+
       {torchAssignments.length > 0 && (
         <div className="card torch-week-card">
           <div className="card-header">
@@ -146,7 +156,7 @@ export default function WeekDetail({ user, setAppError }) {
         </div>
       )}
 
-      {message.includes('!') && user && !torchAssignments.some(t => t.user_id === user.id) && (
+      {message.includes('!') && user?.in_league && !torchAssignments.some(t => t.user_id === user.id) && (
         <div className="alert alert-torch-nudge">
           🔦 You haven't lit your torch yet! Head to the <Link to="/">Dashboard</Link> to pick a contestant and start earning torch points.
         </div>
@@ -277,7 +287,7 @@ export default function WeekDetail({ user, setAppError }) {
                       {pa.points_override != null && (
                         <span className="answer-points">{pa.points_override} pts</span>
                       )}
-                      {pi === pickedAnswers.length - 1 && (
+                      {pi === pickedAnswers.length - 1 && canPick && (
                         <button
                           type="button"
                           className="btn btn-xs"
@@ -318,6 +328,7 @@ export default function WeekDetail({ user, setAppError }) {
                           <input
                             type="checkbox"
                             checked={isSelected}
+                            disabled={!canPick}
                             onChange={() => {
                               if (isSelected) {
                                 setPicks({ ...picks, [q.id]: currentPicks.filter(id => id !== a.id) });
@@ -331,7 +342,7 @@ export default function WeekDetail({ user, setAppError }) {
                           <input
                             type="checkbox"
                             checked={isSelected}
-                            disabled={!isSelected && currentPicks.length >= q.required_answers}
+                            disabled={!canPick || (!isSelected && currentPicks.length >= q.required_answers)}
                             onChange={() => {
                               if (isSelected) {
                                 setPicks({ ...picks, [q.id]: currentPicks.filter(id => id !== a.id) });
@@ -350,6 +361,7 @@ export default function WeekDetail({ user, setAppError }) {
                             name={`q-${q.id}`}
                             value={a.id}
                             checked={isSelected}
+                            disabled={!canPick}
                             onChange={() => {
                               setPicks({ ...picks, [q.id]: a.id });
                               setExpandedQuestions({ ...expandedQuestions, [q.id]: false });
@@ -399,7 +411,7 @@ export default function WeekDetail({ user, setAppError }) {
           );
         })}
 
-        {!isLocked && totalQuestions > 0 && (
+        {canPick && totalQuestions > 0 && (
           <div className="submit-area">
             <p className="pick-count">{answeredCount} of {totalQuestions} questions answered</p>
             <button
