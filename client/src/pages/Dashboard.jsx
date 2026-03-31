@@ -159,7 +159,7 @@ export default function Dashboard({ user, setAppError }) {
         <div className="card-header">
           <h2>🏆 League Standings</h2>
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap rankings-table-wrap">
           <table className="rankings-table">
             <thead>
               <tr>
@@ -175,8 +175,8 @@ export default function Dashboard({ user, setAppError }) {
                   <td className="rank-cell">{i + 1}</td>
                   <td>{r.name}</td>
                   <td className="score-cell">{r.score}</td>
-                  <td className="potential-cell">
-                    <span className="potential-tooltip-wrap">
+                  <td className="potential-cell potential-cell--tooltip">
+                    <span className={`potential-tooltip-wrap ${i < 5 ? 'potential-tooltip-wrap--below' : ''}`}>
                       {r.potentialScore}
                       <span className="potential-tooltip" role="tooltip">
                         <span className="potential-tooltip-line">Poll potential: {r.pollPotential}</span>

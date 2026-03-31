@@ -310,6 +310,11 @@ body {
 /* ===== Rankings Table ===== */
 .table-wrap { overflow-x: auto; }
 
+/* League standings: don’t clip hover tooltips (default overflow-x: auto creates a scrollport). */
+.rankings-table-wrap {
+  overflow: visible;
+}
+
 .rankings-table {
   width: 100%;
   border-collapse: collapse;
@@ -337,6 +342,16 @@ body {
 .rank-cell { color: var(--gold); font-weight: 700; }
 .score-cell { color: var(--accent); font-weight: 700; font-size: 1.1rem; }
 .potential-cell { color: var(--text-muted); }
+
+.rankings-table .potential-cell--tooltip {
+  overflow: visible;
+  position: relative;
+  z-index: 0;
+}
+
+.rankings-table tbody tr:hover .potential-cell--tooltip {
+  z-index: 2;
+}
 
 .potential-tooltip-wrap {
   position: relative;
@@ -372,6 +387,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* First rows: open downward so tooltips aren’t cut off above the table / header. */
+.potential-tooltip-wrap--below .potential-tooltip {
+  bottom: auto;
+  top: 100%;
+  margin-bottom: 0;
+  margin-top: 8px;
 }
 
 .potential-tooltip-line {
