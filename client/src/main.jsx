@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import App from './App';
+import { appBasePath } from './authPaths';
 import './App.css';
 
 const domain = 'snaptracker.auth0.com';
@@ -18,7 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         useRefreshTokens={true}
         cacheLocation="localstorage"
         authorizationParams={{
-          redirect_uri: window.location.origin + (window.location.pathname.includes('/snuffd') ? '/snuffd' : ''),
+          redirect_uri: appBasePath(),
           audience,
           scope: 'openid profile email offline_access',
         }}

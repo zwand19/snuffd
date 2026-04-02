@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { api, setGetToken, setOnAuthError } from './api';
+import { appBasePath, loginSelectAccountParams } from './authPaths';
 import Dashboard from './pages/Dashboard';
 import WeekDetail from './pages/WeekDetail';
 import AdminPanel from './pages/AdminPanel';
@@ -17,17 +18,32 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (isAuthenticated) {
-      setAppError(null);
-      api.syncUser({ email: user.email, name: user.name })
-        .then(setDbUser)
-        .catch((err) => {
-          if (err.status === 0) {
-            setAppError('server_down');
-          }
-        });
+    if (!isAuthenticated) {
+      setDbUser(null);
+      return;
     }
-  }, [isAuthenticated]);
+    setAppError(null);
+    api.syncUser({ email: user.email, name: user.name })
+      .then(setDbUser)
+      .catch((err) => {
+        if (err.status === 0) {
+          setAppError('server_down');
+        }
+      });
+  }, [isAuthenticated, user?.email, user?.name]);
+
+  function handleLogout() {
+    logout({
+      logoutParams: { returnTo: appBasePath() },
+      openUrl: (url) => {
+        window.location.replace(url);
+      },
+    });
+  }
+
+  function handleLogin() {
+    loginWithRedirect({ authorizationParams: loginSelectAccountParams });
+  }
 
   if (isLoading) {
     return (
@@ -48,14 +64,11 @@ export default function App() {
           <Link to="/">Dashboard</Link>
           {dbUser?.is_admin ? <Link to="/admin">Admin</Link> : null}
           {isAuthenticated ? (
-            <button
-              onClick={() => logout({ logoutParams: { returnTo: window.location.origin + (window.location.pathname.includes('/snuffd') ? '/snuffd' : '') } })}
-              className="btn btn-sm"
-            >
+            <button type="button" onClick={handleLogout} className="btn btn-sm">
               Logout
             </button>
           ) : (
-            <button onClick={() => loginWithRedirect()} className="btn btn-sm btn-primary">
+            <button type="button" onClick={handleLogin} className="btn btn-sm btn-primary">
               Login
             </button>
           )}
@@ -64,7 +77,7 @@ export default function App() {
       {appError === 'session_expired' && (
         <div className="app-banner app-banner-error">
           <span>Your session has expired.</span>
-          <button onClick={() => loginWithRedirect()} className="btn btn-sm btn-primary">
+          <button type="button" onClick={handleLogin} className="btn btn-sm btn-primary">
             Log in again
           </button>
         </div>

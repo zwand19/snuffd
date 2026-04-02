@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { api } from '../api';
+import { loginSelectAccountParams } from '../authPaths';
 
 export default function Dashboard({ user, setAppError }) {
   const { isAuthenticated, loginWithRedirect } = useAuth0();
@@ -80,7 +81,11 @@ export default function Dashboard({ user, setAppError }) {
           <h1 className="hero-title">SNUFFD</h1>
           <p className="hero-subtitle">Survivor Fantasy League</p>
           <p className="hero-desc">Outwit. Outplay. Out-predict.</p>
-          <button onClick={() => loginWithRedirect()} className="btn btn-primary btn-lg">
+          <button
+            type="button"
+            onClick={() => loginWithRedirect({ authorizationParams: loginSelectAccountParams })}
+            className="btn btn-primary btn-lg"
+          >
             Enter Tribal Council
           </button>
         </div>
@@ -262,12 +267,14 @@ export default function Dashboard({ user, setAppError }) {
         {myTorch && (
           <div className="torch-my-status">
             <span className="torch-icon">🔦</span>
-            <span>
-              Your torch: <strong>{myTorch.contestant_name}</strong> — <strong>{myTorch.points}</strong> pts
-            </span>
-            {myTorch.needs_switch ? (
-              <span className="badge badge-warning">Must Switch</span>
-            ) : null}
+            <div className="torch-my-status-text">
+              <span>
+                Your torch: <strong>{myTorch.contestant_name}</strong> — <strong>{myTorch.points}</strong> pts
+              </span>
+              {myTorch.needs_switch ? (
+                <span className="badge badge-warning torch-must-switch-badge">Must Switch</span>
+              ) : null}
+            </div>
           </div>
         )}
 
@@ -290,13 +297,16 @@ export default function Dashboard({ user, setAppError }) {
           </div>
         )}
 
-        <div className="table-wrap">
-          <table className="rankings-table">
+        <div className="table-wrap torch-table-wrap">
+          <table className="rankings-table rankings-table--torch">
             <thead>
               <tr>
                 <th>Rank</th>
                 <th>Player</th>
-                <th>Carrying For</th>
+                <th className="torch-col-carry">
+                  <span className="torch-th-full">Carrying For</span>
+                  <span className="torch-th-short">Carrying</span>
+                </th>
                 <th>Pts</th>
                 {torchRankings.some(t => t.torchScore !== null) && <th>Score</th>}
               </tr>
@@ -307,8 +317,12 @@ export default function Dashboard({ user, setAppError }) {
                   <td className="rank-cell">{i + 1}</td>
                   <td>{t.user_name}</td>
                   <td className="torch-contestant-cell">
-                    {t.contestant_name || '—'}
-                    {t.needs_switch ? <span className="badge badge-warning" style={{ marginLeft: '0.5rem' }}>Must Switch</span> : null}
+                    <div className="torch-contestant-stack">
+                      <span className="torch-contestant-name">{t.contestant_name || '—'}</span>
+                      {t.needs_switch ? (
+                        <span className="badge badge-warning torch-must-switch-badge">Must Switch</span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="score-cell">{t.points}</td>
                   {torchRankings.some(tr => tr.torchScore !== null) && (

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth0 } from '@auth0/auth0-react';
 import { api } from '../api';
+import { loginSelectAccountParams } from '../authPaths';
 
 export default function WeekDetail({ user, setAppError }) {
   const { id } = useParams();
@@ -83,7 +84,12 @@ export default function WeekDetail({ user, setAppError }) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
         <p>Log in to view this week's poll.</p>
-        <button onClick={() => loginWithRedirect()} className="btn btn-primary" style={{ marginTop: '1rem' }}>
+        <button
+          type="button"
+          onClick={() => loginWithRedirect({ authorizationParams: loginSelectAccountParams })}
+          className="btn btn-primary"
+          style={{ marginTop: '1rem' }}
+        >
           Login
         </button>
       </div>

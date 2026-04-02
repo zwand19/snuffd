@@ -831,7 +831,42 @@ body {
   font-size: 0.95rem;
 }
 
-.torch-icon { font-size: 1.3rem; }
+.torch-icon { font-size: 1.3rem; flex-shrink: 0; }
+
+.torch-my-status-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  min-width: 0;
+}
+
+.torch-contestant-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+}
+
+.torch-contestant-name {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.torch-th-short {
+  display: none;
+}
+
+.torch-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rankings-table--torch {
+  width: 100%;
+  min-width: 300px;
+}
 
 .torch-picker {
   padding: 1rem;
@@ -953,7 +988,10 @@ body {
   margin-bottom: 0 !important;
 }
 
-.torch-contestant-cell { color: var(--text-secondary); }
+.torch-contestant-cell {
+  color: var(--text-secondary);
+  max-width: 12rem;
+}
 .torch-score-cell { color: var(--gold); font-weight: 700; }
 
 .badge-warning {
@@ -1040,7 +1078,7 @@ body {
 @media (max-width: 768px) {
   .navbar { padding: 0.75rem 1rem; }
   .nav-logo { font-size: 1.3rem; letter-spacing: 2px; }
-  .nav-links { gap: 1rem; }
+  .nav-links { gap: 1rem; flex-wrap: wrap; justify-content: flex-end; }
   .main-content { padding: 1rem; }
   .hero-title { font-size: 3rem; letter-spacing: 4px; }
   .banner h1 { font-size: 2rem; }
@@ -1049,4 +1087,48 @@ body {
   .question-edit-header { flex-direction: column; align-items: flex-start; }
   .inline-form { flex-direction: column; align-items: stretch; }
   .inline-form .btn { align-self: flex-start; }
+
+  .rankings-table th,
+  .rankings-table td {
+    padding: 0.55rem 0.45rem;
+    font-size: 0.875rem;
+  }
+
+  .rankings-table th {
+    font-size: 0.68rem;
+    letter-spacing: 0.35px;
+  }
+
+  .score-cell {
+    font-size: 1rem;
+  }
+
+  .torch-contestant-cell {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .torch-contestant-stack {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .torch-my-status {
+    align-items: flex-start;
+  }
+
+  .torch-my-status-text {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .torch-th-full {
+    display: none;
+  }
+
+  .torch-th-short {
+    display: inline;
+  }
 }
