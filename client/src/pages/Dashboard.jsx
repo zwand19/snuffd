@@ -114,6 +114,12 @@ export default function Dashboard({ user, setAppError }) {
         return bTotal - aTotal;
       })
     : rankings;
+  const runnerUps = contestants.filter(c => c.torch_final_result === 'runner_up');
+  const finalWeekers = contestants.filter(c => c.torch_final_result === 'final_week');
+  const leagueWinner = isCompleted && displayedRankings.length > 0 ? displayedRankings[0] : null;
+  const leagueWinnerTotal = leagueWinner
+    ? (leagueWinner.score || 0) + (finalTorchByUser[leagueWinner.id] ?? 0)
+    : 0;
 
   return (
     <div className="dashboard">
@@ -130,10 +136,42 @@ export default function Dashboard({ user, setAppError }) {
 
       {isCompleted && winnerContestant && (
         <div className="card winner-card">
-          <span className="winner-card-icon">👑</span>
+          <div className="winner-card-main">
+            <span className="winner-card-icon">👑</span>
+            <div className="winner-card-text">
+              <div className="winner-card-label">Sole Survivor</div>
+              <div className="winner-card-name">{winnerContestant.name}</div>
+            </div>
+          </div>
+          {(runnerUps.length > 0 || finalWeekers.length > 0) && (
+            <div className="winner-card-runners">
+              {runnerUps.map(c => (
+                <div key={c.id} className="winner-card-runner">
+                  <span className="winner-card-runner-label">Runner-up</span>
+                  <span className="winner-card-runner-name">{c.name}</span>
+                </div>
+              ))}
+              {finalWeekers.map(c => (
+                <div key={c.id} className="winner-card-runner">
+                  <span className="winner-card-runner-label">Final Week</span>
+                  <span className="winner-card-runner-name">{c.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isCompleted && leagueWinner && (
+        <div className="card league-winner-card">
+          <span className="winner-card-icon">🏆</span>
           <div className="winner-card-text">
-            <div className="winner-card-label">Sole Survivor</div>
-            <div className="winner-card-name">{winnerContestant.name}</div>
+            <div className="winner-card-label">League Champion</div>
+            <div className="winner-card-name">{leagueWinner.name}</div>
+          </div>
+          <div className="league-winner-score">
+            <div className="league-winner-score-value">{leagueWinnerTotal}</div>
+            <div className="league-winner-score-label">pts</div>
           </div>
         </div>
       )}
@@ -196,7 +234,7 @@ export default function Dashboard({ user, setAppError }) {
               <tr>
                 <th>Rank</th>
                 <th>Player</th>
-                <th>Score</th>
+                <th>{isCompleted ? 'Poll Score' : 'Score'}</th>
                 {isCompleted ? (
                   <>
                     <th>Torch Score</th>

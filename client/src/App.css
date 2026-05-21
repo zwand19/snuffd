@@ -259,8 +259,15 @@ body {
   background: linear-gradient(180deg, rgba(201, 168, 76, 0.12) 0%, var(--bg-card) 100%);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 1rem;
   padding: 1rem 1.5rem;
+}
+
+.winner-card-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .winner-card-icon {
@@ -281,6 +288,73 @@ body {
   font-family: var(--font-heading);
   font-size: 1.5rem;
   color: var(--gold);
+}
+
+.winner-card-runners {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.winner-card-runner {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.winner-card-runner-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.winner-card-runner-name {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.league-winner-card {
+  border-color: var(--accent);
+  border-width: 2px;
+  background: linear-gradient(180deg, rgba(232, 127, 0, 0.12) 0%, var(--bg-card) 100%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+}
+
+.league-winner-card .winner-card-name { color: var(--accent); }
+
+.league-winner-score {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1;
+}
+
+.league-winner-score-value {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.league-winner-score-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+@media (max-width: 480px) {
+  .winner-card { flex-direction: column; align-items: stretch; }
+  .winner-card-runners { align-items: flex-start; text-align: left; }
 }
 
 .total-score-cell { font-weight: 700; color: var(--gold); }
