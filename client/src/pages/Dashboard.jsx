@@ -15,6 +15,7 @@ export default function Dashboard({ user, setAppError }) {
   const [contestants, setContestants] = useState([]);
   const [showTorchPicker, setShowTorchPicker] = useState(false);
   const [torchMessage, setTorchMessage] = useState('');
+  const [gamePhase, setGamePhase] = useState('pre_merge');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -25,16 +26,18 @@ export default function Dashboard({ user, setAppError }) {
 
   async function loadData() {
     try {
-      const [weeksData, rankingsData, torchData, contestantsData] = await Promise.all([
+      const [weeksData, rankingsData, torchData, contestantsData, phaseData] = await Promise.all([
         api.getWeeks(),
         api.getRankings(),
         api.getTorchRankings(),
         api.getContestants(),
+        api.getGamePhase(),
       ]);
       setWeeks(weeksData);
       setRankings(rankingsData);
       setTorchRankings(torchData);
       setContestants(contestantsData);
+      setGamePhase(phaseData.game_phase);
 
       if (user) {
         const mine = torchData.find(t => t.user_id === user.id);
@@ -98,6 +101,19 @@ export default function Dashboard({ user, setAppError }) {
     .sort((a, b) => b.week_number - a.week_number);
 
   const inLeague = !!user?.in_league;
+  const isCompleted = gamePhase === 'completed';
+  const winnerContestant = contestants.find(c => c.torch_final_result === 'winner');
+  const finalTorchByUser = {};
+  for (const t of torchRankings) {
+    finalTorchByUser[t.user_id] = t.torchScore ?? 0;
+  }
+  const displayedRankings = isCompleted
+    ? [...rankings].sort((a, b) => {
+        const aTotal = (a.score || 0) + (finalTorchByUser[a.id] ?? 0);
+        const bTotal = (b.score || 0) + (finalTorchByUser[b.id] ?? 0);
+        return bTotal - aTotal;
+      })
+    : rankings;
 
   return (
     <div className="dashboard">
@@ -109,6 +125,16 @@ export default function Dashboard({ user, setAppError }) {
       {user && !inLeague && (
         <div className="app-banner app-banner-warning" style={{ marginBottom: '1rem' }}>
           <span>View-only: you are not in the league yet. An admin can add you when you are ready to play.</span>
+        </div>
+      )}
+
+      {isCompleted && winnerContestant && (
+        <div className="card winner-card">
+          <span className="winner-card-icon">👑</span>
+          <div className="winner-card-text">
+            <div className="winner-card-label">Sole Survivor</div>
+            <div className="winner-card-name">{winnerContestant.name}</div>
+          </div>
         </div>
       )}
 
@@ -171,31 +197,49 @@ export default function Dashboard({ user, setAppError }) {
                 <th>Rank</th>
                 <th>Player</th>
                 <th>Score</th>
-                <th>Potential</th>
+                {isCompleted ? (
+                  <>
+                    <th>Torch Score</th>
+                    <th>Total Score</th>
+                  </>
+                ) : (
+                  <th>Potential</th>
+                )}
               </tr>
             </thead>
             <tbody>
-              {rankings.map((r, i) => (
-                <tr key={r.id} className={r.id === user?.id ? 'highlight-row' : ''}>
-                  <td className="rank-cell">{i + 1}</td>
-                  <td>{r.name}</td>
-                  <td className="score-cell">{r.score}</td>
-                  <td className="potential-cell potential-cell--tooltip">
-                    <span className={`potential-tooltip-wrap ${i < 5 ? 'potential-tooltip-wrap--below' : ''}`}>
-                      {r.potentialScore}
-                      <span className="potential-tooltip" role="tooltip">
-                        <span className="potential-tooltip-line">Poll potential: {r.pollPotential}</span>
-                        <span className="potential-tooltip-line">Torch score: {r.torchScore}</span>
-                        <span className="potential-tooltip-note">
-                          Torch streak bonus and other torch bonuses are not included in this potential.
+              {displayedRankings.map((r, i) => {
+                const finalTorch = finalTorchByUser[r.id] ?? 0;
+                const total = (r.score || 0) + finalTorch;
+                return (
+                  <tr key={r.id} className={r.id === user?.id ? 'highlight-row' : ''}>
+                    <td className="rank-cell">{i + 1}</td>
+                    <td>{r.name}</td>
+                    <td className="score-cell">{r.score}</td>
+                    {isCompleted ? (
+                      <>
+                        <td className="score-cell">{finalTorch}</td>
+                        <td className="score-cell total-score-cell">{total}</td>
+                      </>
+                    ) : (
+                      <td className="potential-cell potential-cell--tooltip">
+                        <span className={`potential-tooltip-wrap ${i < 5 ? 'potential-tooltip-wrap--below' : ''}`}>
+                          {r.potentialScore}
+                          <span className="potential-tooltip" role="tooltip">
+                            <span className="potential-tooltip-line">Poll potential: {r.pollPotential}</span>
+                            <span className="potential-tooltip-line">Torch score: {r.torchScore}</span>
+                            <span className="potential-tooltip-note">
+                              Torch streak bonus and other torch bonuses are not included in this potential.
+                            </span>
+                          </span>
                         </span>
-                      </span>
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {rankings.length === 0 && (
-                <tr><td colSpan="4" className="empty-cell">No scores yet</td></tr>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+              {displayedRankings.length === 0 && (
+                <tr><td colSpan={isCompleted ? 5 : 4} className="empty-cell">No scores yet</td></tr>
               )}
             </tbody>
           </table>
@@ -205,7 +249,7 @@ export default function Dashboard({ user, setAppError }) {
       <div className="card">
         <div className="card-header">
           <h2>🔦 Torch Standings</h2>
-          {inLeague && (!myTorch ? (
+          {inLeague && !isCompleted && (!myTorch ? (
             <button onClick={() => setShowTorchPicker(true)} className="btn btn-primary btn-sm">
               Light Your Torch
             </button>
@@ -278,7 +322,7 @@ export default function Dashboard({ user, setAppError }) {
           </div>
         )}
 
-        {inLeague && showTorchPicker && (
+        {inLeague && !isCompleted && showTorchPicker && (
           <div className="torch-picker">
             <h4>Pick a contestant to carry your torch</h4>
             {!myTorch && <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Your torch starts at 35 points. You can voluntarily switch for a penalty later, or be penalized & forced to re-pick if your torch is snuffed.</p>}
@@ -304,11 +348,11 @@ export default function Dashboard({ user, setAppError }) {
                 <th>Rank</th>
                 <th>Player</th>
                 <th className="torch-col-carry">
-                  <span className="torch-th-full">Carrying For</span>
-                  <span className="torch-th-short">Carrying</span>
+                  <span className="torch-th-full">{isCompleted ? 'Carried For' : 'Carrying For'}</span>
+                  <span className="torch-th-short">{isCompleted ? 'Carried' : 'Carrying'}</span>
                 </th>
-                <th>Pts</th>
-                {torchRankings.some(t => t.torchScore !== null) && <th>Score</th>}
+                <th>{isCompleted ? 'Pre-Finale Pts' : 'Pts'}</th>
+                {torchRankings.some(t => t.torchScore !== null) && <th>{isCompleted ? 'Final Pts' : 'Score'}</th>}
               </tr>
             </thead>
             <tbody>

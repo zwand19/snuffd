@@ -20,7 +20,7 @@ router.get('/game_phase', requireAuth, async (req, res) => {
 
 router.put('/game_phase', requireAdmin, async (req, res) => {
   const { game_phase } = req.body;
-  const valid = ['pre_merge', 'post_merge', 'pre_finale'];
+  const valid = ['pre_merge', 'post_merge', 'pre_finale', 'completed'];
   if (!valid.includes(game_phase)) {
     return res.status(400).json({ error: `Must be one of: ${valid.join(', ')}` });
   }

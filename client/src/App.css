@@ -253,6 +253,38 @@ body {
   background: linear-gradient(180deg, rgba(232, 127, 0, 0.08) 0%, var(--bg-card) 100%);
 }
 
+.winner-card {
+  border-color: var(--gold);
+  border-width: 2px;
+  background: linear-gradient(180deg, rgba(201, 168, 76, 0.12) 0%, var(--bg-card) 100%);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+}
+
+.winner-card-icon {
+  font-size: 2.25rem;
+  line-height: 1;
+}
+
+.winner-card-text { display: flex; flex-direction: column; gap: 0.15rem; }
+
+.winner-card-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.winner-card-name {
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  color: var(--gold);
+}
+
+.total-score-cell { font-weight: 700; color: var(--gold); }
+
 .lock-time {
   color: var(--text-muted);
   font-size: 0.85rem;

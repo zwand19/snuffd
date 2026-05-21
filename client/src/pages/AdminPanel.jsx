@@ -928,7 +928,7 @@ function TorchesTab({ contestants, onRefresh }) {
 
   const finalists = contestants.filter(c => !c.eliminated || c.torch_final_result);
   const activeContestants = contestants.filter(c => !c.eliminated);
-  const phaseLabels = { pre_merge: 'Pre-Merge', post_merge: 'Post-Merge', pre_finale: 'Pre-Finale' };
+  const phaseLabels = { pre_merge: 'Pre-Merge', post_merge: 'Post-Merge', pre_finale: 'Pre-Finale', completed: 'Completed' };
 
   return (
     <div>

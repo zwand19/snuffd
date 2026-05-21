@@ -234,17 +234,25 @@ router.get('/rankings', requireAuth, async (req, res) => {
         }
 
         if (t.torch_final_result === 'winner') {
-          for (const wk of lockedWeeks) {
-            const entryAtLock = [...userHist]
-              .filter(h => new Date(h.created_at) <= new Date(wk.lock_time))
-              .pop();
-            if (entryAtLock && entryAtLock.contestant_id === t.contestant_id) {
-              consecutiveWeeks++;
+          const sortedHist = [...userHist].sort(
+            (a, b) => new Date(a.created_at) - new Date(b.created_at)
+          );
+          let runStart = null;
+          for (let i = sortedHist.length - 1; i >= 0; i--) {
+            if (sortedHist[i].contestant_id === t.contestant_id) {
+              runStart = new Date(sortedHist[i].created_at);
             } else {
               break;
             }
           }
-          consecutiveWeeks = Math.min(consecutiveWeeks, 6);
+          const finalLockRow = lockedWeeks[0];
+          if (runStart && finalLockRow) {
+            const finalLock = new Date(finalLockRow.lock_time);
+            const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+            const elapsedMs = finalLock.getTime() - runStart.getTime();
+            consecutiveWeeks = Math.max(0, Math.ceil(elapsedMs / msPerWeek));
+            consecutiveWeeks = Math.min(consecutiveWeeks, 6);
+          }
           torchScore = t.points + consecutiveWeeks;
         }
       }
